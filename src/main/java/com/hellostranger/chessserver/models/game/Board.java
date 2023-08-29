@@ -5,15 +5,21 @@ import com.hellostranger.chessserver.exceptions.InvalidMoveException;
 import com.hellostranger.chessserver.exceptions.SquareNotFoundException;
 import com.hellostranger.chessserver.models.enums.Color;
 import com.hellostranger.chessserver.models.enums.PieceType;
+import jakarta.persistence.Transient;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Arrays;
 import java.util.Objects;
 
-@Data
+@Getter
+@Setter
+@EqualsAndHashCode
 @Slf4j
 public class Board {
-
 
     private Square[][] squaresArray;
 
@@ -23,8 +29,16 @@ public class Board {
     @JsonIgnore
     private Piece blackKing;
 
-    @JsonIgnore
+
     private Square phantomPawnSquare; //for en passant.
+
+    @Override
+    public String toString() {
+        return "Board{" +
+                "squaresArray=" + Arrays.toString(squaresArray) +
+                ", phantomPawnSquare=" + phantomPawnSquare +
+                '}';
+    }
 
     public Board(){
         squaresArray = new Square[8][8];
@@ -78,7 +92,7 @@ public class Board {
             throw new InvalidMoveException("Piece can't make this move");
         }
         boolean isCastlingMove = isCastlingMove(start, end);
-        if(!isBlockingPiece(movingPiece, start, end, isCastlingMove)){
+        if(isPieceBlocked(movingPiece, start, end, isCastlingMove)){
             throw new InvalidMoveException("Piece can't make this move, its blocked");
         }
 
@@ -115,158 +129,204 @@ public class Board {
             for(int col = 0; col < 8; col++){
                 Square currentSquare = squaresArray[row][col];
                 if(currentSquare.getPiece() != null && currentSquare.getPiece().getColor() == playerColor){
-                    try{
-                        switch (currentSquare.getPiece().getPieceType()){
-                            case PAWN -> {
-                                if(playerColor == Color.BLACK){
-                                    if(doesBlackPawnHaveAMove(currentSquare)){ return true; }
-                                } else{
-                                    if(doesWhitePawnHaveAMove(currentSquare)){ return true; }
-                                }
-                            }
-                            case KNIGHT -> {
-                                if(doesKnightHaveAMove(currentSquare)) { return true; }
-                            }
-                            case BISHOP -> {
-                                if(doesBishopHaveAMove(currentSquare)){ return true; }
-                            }
-                            case ROOK -> {
-                                if(doesRookHaveAMove(currentSquare)){ return true; }
-                            }
-                            case QUEEN -> {
-                                if(doesQueenHaveAMove(currentSquare)){ return true; }
-                            }
-                            case KING -> {
-                                if(doesKingHaveAMove(currentSquare)){ return true; }
+                    switch (currentSquare.getPiece().getPieceType()){
+                        case PAWN -> {
+                            if(playerColor == Color.BLACK){
+                                if(doesBlackPawnHaveAMove(currentSquare)){ return true; }
+                            } else{
+                                if(doesWhitePawnHaveAMove(currentSquare)){ return true; }
                             }
                         }
-                    } catch (InvalidMoveException ignored) {}
+                        case KNIGHT -> {
+                            if(doesKnightHaveAMove(currentSquare)) { return true; }
+                        }
+                        case BISHOP -> {
+                            if(doesBishopHaveAMove(currentSquare)){ return true; }
+                        }
+                        case ROOK -> {
+                            if(doesRookHaveAMove(currentSquare)){ return true; }
+                        }
+                        case QUEEN -> {
+                            if(doesQueenHaveAMove(currentSquare)){ return true; }
+                        }
+                        case KING -> {
+                            if(doesKingHaveAMove(currentSquare)){ return true; }
+                        }
+                    }
                 }
             }
         }
         return false;
     }
-    private boolean doesBlackPawnHaveAMove(Square currentSquare) throws InvalidMoveException {
+    private boolean doesBlackPawnHaveAMove(Square currentSquare) {
         int row = currentSquare.getRowIndex();
         int col = currentSquare.getColIndex();
         if(row - 2 >= 0){
-            if(isValidMove(currentSquare, squaresArray[row-2][col])){
-                log.info("A black pawn on square " + currentSquare + "can move forward 2 squares");
-                return true;
-            }
+            try{
+                if(isValidMove(currentSquare, squaresArray[row-2][col])){
+                    log.info("A black pawn on square " + currentSquare + "can move forward 2 squares");
+                    return true;
+                }
+            }catch (InvalidMoveException ignored) {}
+
         }
         if (row - 1 >= 0) {
-            if(isValidMove(currentSquare, squaresArray[row-1][col])){
-                log.info("A black pawn on square " + currentSquare + "can move forward");
-                return true;
-            }
-            if(col + 1 < 8 && isValidMove(currentSquare, squaresArray[row-1][col+1])){
-                log.info("A black pawn on square " + currentSquare + "can move capture to the right");
-                return true;
-            }
-            if(col - 1 >= 0 && isValidMove(currentSquare, squaresArray[row-1][col-1])){
-                log.info("A black pawn on square " + currentSquare + "can move capture to the left");
-                return true;
-            }
+            try{
+                if(isValidMove(currentSquare, squaresArray[row-1][col])){
+                    log.info("A black pawn on square " + currentSquare + "can move forward");
+                    return true;
+                }
+            }catch (InvalidMoveException ignored) {}
+            try{
+                if(col + 1 < 8 && isValidMove(currentSquare, squaresArray[row-1][col+1])){
+                    log.info("A black pawn on square " + currentSquare + "can move capture to the right");
+                    return true;
+                }
+            }catch (InvalidMoveException ignored) {}
+            try{
+                if(col - 1 >= 0 && isValidMove(currentSquare, squaresArray[row-1][col-1])){
+                    log.info("A black pawn on square " + currentSquare + "can move capture to the left");
+                    return true;
+                }
+            }catch (InvalidMoveException ignored) {}
         }
         return false;
     }
 
-    private boolean doesWhitePawnHaveAMove(Square currentSquare) throws InvalidMoveException {
+    private boolean doesWhitePawnHaveAMove(Square currentSquare){
         int row = currentSquare.getRowIndex();
         int col = currentSquare.getColIndex();
         if(row + 2 < 8){
-            if(isValidMove(currentSquare, squaresArray[row+2][col])){
-                log.info("A white pawn on square " + currentSquare + "can move forward 2");
-                return true;
-            }
+            try{
+                if(isValidMove(currentSquare, squaresArray[row+2][col])){
+                    log.info("A white pawn on square " + currentSquare + "can move forward 2");
+                    return true;
+                }
+            }catch (InvalidMoveException ignored){}
+
         }
         if (row + 1 < 8) {
-            if(isValidMove(currentSquare, squaresArray[row+1][col])){
-                log.info("A white pawn on square " + currentSquare + "can move forward");
-                return true;
-            }
-            if(col + 1 < 8 && isValidMove(currentSquare, squaresArray[row+1][col+1])){
-                log.info("A white pawn on square " + currentSquare + "can move capture to the left");
-                return true;
-            }
-            if(col - 1 >= 0 && isValidMove(currentSquare, squaresArray[row+1][col-1])){
-                log.info("A white pawn on square " + currentSquare + "can move capture to the left");
-                return true;
-            }
+            try{
+                if(isValidMove(currentSquare, squaresArray[row+1][col])){
+                    log.info("A white pawn on square " + currentSquare + "can move forward");
+                    return true;
+                }
+            }catch (InvalidMoveException ignored){}
+            try{
+                if(col + 1 < 8 && isValidMove(currentSquare, squaresArray[row+1][col+1])){
+                    log.info("A white pawn on square " + currentSquare + "can move capture to the left");
+                    return true;
+                }
+            }catch (InvalidMoveException ignored){}
+            try{
+                if(col - 1 >= 0 && isValidMove(currentSquare, squaresArray[row+1][col-1])){
+                    log.info("A white pawn on square " + currentSquare + "can move capture to the left");
+                    return true;
+                }
+            }catch (InvalidMoveException ignored){}
+
         }
         return false;
     }
-    private boolean doesKnightHaveAMove(Square currentSquare) throws InvalidMoveException {
+    private boolean doesKnightHaveAMove(Square currentSquare) {
         int row = currentSquare.getRowIndex();
         int col = currentSquare.getColIndex();
         if(row + 1 < 8){
-            if(col + 2 < 8 && isValidMove(currentSquare, squaresArray[row + 1][col + 2])) {
-                log.info("knight can move from1 " + currentSquare + "to " + squaresArray[row + 1][col + 2]);
-                return true;
-            }
-            if(col - 2 > 0 && isValidMove(currentSquare, squaresArray[row + 1][col - 2])){
-                log.info("knight can move from2 " + currentSquare + "to " + squaresArray[row + 1][col - 2]);
-                return true;
-            }
+            try{
+                if(col + 2 < 8 && isValidMove(currentSquare, squaresArray[row + 1][col + 2])) {
+                    log.info("knight can move from1 " + currentSquare + "to " + squaresArray[row + 1][col + 2]);
+                    return true;
+                }
+            }catch (InvalidMoveException ignored) {}
+            try{
+                if(col - 2 > 0 && isValidMove(currentSquare, squaresArray[row + 1][col - 2])){
+                    log.info("knight can move from2 " + currentSquare + "to " + squaresArray[row + 1][col - 2]);
+                    return true;
+                }
+            }catch (InvalidMoveException ignored) {}
         }
         if(row - 1 > 0){
-            if(col + 2 < 8 && isValidMove(currentSquare, squaresArray[row - 1][col + 2])) {
-                log.info("knight can move from3 " + currentSquare + "to " + squaresArray[row - 1][col + 2]);
-                return true;
-            }
-            if(col - 2 > 0 && isValidMove(currentSquare, squaresArray[row - 1][col - 2])){
-                log.info("knight can move from4 " + currentSquare + "to " + squaresArray[row - 1][col - 2]);
-                return true;
-            }
+            try{
+                if(col + 2 < 8 && isValidMove(currentSquare, squaresArray[row - 1][col + 2])) {
+                    log.info("knight can move from3 " + currentSquare + "to " + squaresArray[row - 1][col + 2]);
+                    return true;
+                }
+            }catch (InvalidMoveException ignored) {}
+            try{
+                if(col - 2 > 0 && isValidMove(currentSquare, squaresArray[row - 1][col - 2])){
+                    log.info("knight can move from4 " + currentSquare + "to " + squaresArray[row - 1][col - 2]);
+                    return true;
+                }
+            }catch (InvalidMoveException ignored) {}
+
         }
         if(row + 2 < 8){
-            if(col + 2 < 8 && isValidMove(currentSquare, squaresArray[row + 2][col + 1])) {
-                log.info("knight can move from5 " + currentSquare + "to " + squaresArray[row + 2][col + 1]);
-                return true;
-            }
-            if(col - 2 > 0 && isValidMove(currentSquare, squaresArray[row + 2][col - 1])){
-                log.info("knight can move from6 " + currentSquare + "to " + squaresArray[row + 2][col - 1]);
-                return true;
-            }
+            try{
+                if(col + 2 < 8 && isValidMove(currentSquare, squaresArray[row + 2][col + 1])) {
+                    log.info("knight can move from5 " + currentSquare + "to " + squaresArray[row + 2][col + 1]);
+                    return true;
+                }
+            }catch (InvalidMoveException ignored) {}
+
+            try{
+                if(col - 2 > 0 && isValidMove(currentSquare, squaresArray[row + 2][col - 1])){
+                    log.info("knight can move from6 " + currentSquare + "to " + squaresArray[row + 2][col - 1]);
+                    return true;
+                }
+            }catch (InvalidMoveException ignored) {}
+
         }
         if(row - 2 > 0){
-            if(col + 2 < 8 && isValidMove(currentSquare, squaresArray[row - 1][col + 1])) {
-                log.info("knight can move from7 " + currentSquare + "to " + squaresArray[row - 1][col + 1]);
-                return true;
-            }
-            if(col - 2 > 0 && isValidMove(currentSquare, squaresArray[row - 1][col - 1])){
-                log.info("knight can move from8 " + currentSquare + "to " + squaresArray[row - 1][col - 1]);
-                return true;
-            }
+            try{
+                if(col + 2 < 8 && isValidMove(currentSquare, squaresArray[row - 1][col + 1])) {
+                    log.info("knight can move from7 " + currentSquare + "to " + squaresArray[row - 1][col + 1]);
+                    return true;
+                }
+            }catch (InvalidMoveException ignored) {}
+
+            try{
+                if(col - 2 > 0 && isValidMove(currentSquare, squaresArray[row - 1][col - 1])){
+                    log.info("knight can move from8 " + currentSquare + "to " + squaresArray[row - 1][col - 1]);
+                    return true;
+                }
+            }catch (InvalidMoveException ignored) {}
+
         }
 
         return false;
     }
-    private boolean doesBishopHaveAMove(Square currentSquare) throws InvalidMoveException {
+    private boolean doesBishopHaveAMove(Square currentSquare) {
         int row = currentSquare.getRowIndex();
         int col = currentSquare.getColIndex();
         for(int diff = 1; diff < 8; diff++){
             try{
                 if(col + diff < 8){
-                    if(row + diff < 8 && isValidMove(currentSquare, getSquareAt(col + diff, row + diff))){
-                        log.info("bishop can move from1 " + currentSquare + "to " + getSquareAt(col + diff, row + diff));
-                        return true;
-                    }
-                    if(row - diff >= 0 && isValidMove(currentSquare, getSquareAt(col + diff, row - diff))){
-                        log.info("bishop can move from2 " + currentSquare + "to " + getSquareAt(col + diff, row - diff));
-                        return true;
-                    }
+                    try{
+                        if(row + diff < 8 && isValidMove(currentSquare, getSquareAt(col + diff, row + diff))){
+                            log.info("bishop can move from1 " + currentSquare + "to " + getSquareAt(col + diff, row + diff));
+                            return true;
+                        }
+                    }catch (InvalidMoveException ignored) {}
+                    try{
+                        if(row - diff >= 0 && isValidMove(currentSquare, getSquareAt(col + diff, row - diff))){
+                            log.info("bishop can move from2 " + currentSquare + "to " + getSquareAt(col + diff, row - diff));
+                            return true;
+                        }
+                    }catch (InvalidMoveException ignored) {}
                 }
                 if(col - diff >= 0){
-                    if(row + diff < 8 && isValidMove(currentSquare, getSquareAt(col - diff, row + diff))){
-                        log.info("bishop can move from3 " + currentSquare + "to " + getSquareAt(col - diff, row + diff));
-                        return true;
-                    }
-                    if(row - diff >= 0 && isValidMove(currentSquare, getSquareAt(col - diff, row - diff))){
-                        log.info("bishop can move from4 " + currentSquare + "to " + getSquareAt(col - diff, row - diff));
-                        return true;
-                    }
+                    try{
+                        if(row + diff < 8 && isValidMove(currentSquare, getSquareAt(col - diff, row + diff))){
+                            log.info("bishop can move from3 " + currentSquare + "to " + getSquareAt(col - diff, row + diff));
+                            return true;
+                        }
+                    }catch (InvalidMoveException ignored) {}
+                    try{
+                        if(row - diff >= 0 && isValidMove(currentSquare, getSquareAt(col - diff, row - diff))){
+                            log.info("bishop can move from4 " + currentSquare + "to " + getSquareAt(col - diff, row - diff));
+                            return true;
+                        }
+                    }catch (InvalidMoveException ignored) {}
                 }
             }catch (SquareNotFoundException ignored){
 
@@ -275,29 +335,35 @@ public class Board {
         return false;
     }
 
-    private boolean doesRookHaveAMove(Square currentSquare) throws InvalidMoveException{
+    private boolean doesRookHaveAMove(Square currentSquare){
         int row = currentSquare.getRowIndex();
         int col = currentSquare.getColIndex();
         for(int curRow = 0; curRow < 8; curRow++){
             if(curRow != row){
-                if(isValidMove(currentSquare, squaresArray[curRow][col])){
-                    log.info("rook can move from1 " + currentSquare + "to " + squaresArray[curRow][col]);
-                    return true;
-                }
+                try{
+                    if(isValidMove(currentSquare, squaresArray[curRow][col])){
+                        log.info("rook can move from1 " + currentSquare + "to " + squaresArray[curRow][col]);
+                        return true;
+                    }
+                } catch (InvalidMoveException ignored) {}
+
             }
         }
         for(int curCol = 0; curCol < 8; curCol++){
             if(curCol != row){
-                if(isValidMove(currentSquare, squaresArray[row][curCol])){
-                    log.info("rook can move from2 " + currentSquare + "to " + squaresArray[row][curCol]);
-                    return true;
-                }
+                try{
+                    if(isValidMove(currentSquare, squaresArray[row][curCol])){
+                        log.info("rook can move from2 " + currentSquare + "to " + squaresArray[row][curCol]);
+                        return true;
+                    }
+                } catch (InvalidMoveException ignored) {}
+
             }
         }
         return false;
     }
 
-    private boolean doesQueenHaveAMove(Square currentSquare) throws InvalidMoveException{
+    private boolean doesQueenHaveAMove(Square currentSquare){
         if(doesRookHaveAMove(currentSquare) || doesBishopHaveAMove(currentSquare)){
             log.info("Queen can move");
             return true;
@@ -305,18 +371,21 @@ public class Board {
         return false;
     }
 
-    private boolean doesKingHaveAMove(Square currentSquare) throws InvalidMoveException {
+    private boolean doesKingHaveAMove(Square currentSquare) {
         int row = currentSquare.getRowIndex();
         int col = currentSquare.getColIndex();
+        log.info("king is currently at row: " + row + " and col: " + col);
         for(int i = -1; i < 2; i++){
             for(int j = -1; j < 2; j++){
                 if(i != row || j != col){
-                    if(row + i < 8 && row + i >= 0
-                            && col + j < 8 && col + j >=0 &&
-                            isValidMove(currentSquare, squaresArray[row + i][col + j])){
-                        log.info("King can move from " + currentSquare + "to " + squaresArray[row + i][col + j]);
-                        return true;
-                    }
+                    try{
+                        if(row + i < 8 && row + i >= 0
+                                && col + j < 8 && col + j >=0 &&
+                                isValidMove(currentSquare, squaresArray[row + i][col + j])){
+                            log.info("King can move from " + currentSquare + "to " + squaresArray[row + i][col + j]);
+                            return true;
+                        }
+                    } catch (InvalidMoveException e){log.info("king can't move to: " + squaresArray[row + i][col + j] + "eror is: " + e.getMsg());}
                 }
             }
         }
@@ -336,7 +405,10 @@ public class Board {
                 Square currentSquare = squaresArray[row][col];
                 Piece piece = currentSquare.getPiece();
                 if(piece != null && isWhite != (piece.getColor() == Color.WHITE)){
-                    if(piece.canMakeMove(currentSquare, kingSquare) && isBlockingPiece(piece, currentSquare, kingSquare, false)){
+                    if(piece.getPieceType() == PieceType.QUEEN){
+                        log.info("king is at: " + kingSquare + ". queen is at: " + currentSquare + ". is Queen blocked? " + isPieceBlocked(piece, currentSquare, kingSquare, false) + ". can the queen make the move: " + piece.canMakeMove(currentSquare, kingSquare));
+                    }
+                    if(piece.canMakeMove(currentSquare, kingSquare) && !isPieceBlocked(piece, currentSquare, kingSquare, false)){
                         log.info("\n \n isKingInCheck king is in check. by piece: \n" + piece + "\n \n");
                         return true;
                     }
@@ -355,6 +427,7 @@ public class Board {
                 squaresArray[start.getRowIndex()][end.getColIndex()].setPiece(null);
             }
         }
+
         movePieceTemp(start, end);
         if(movingPiece.getPieceType() == PieceType.PAWN && Math.abs(start.getRowIndex() - end.getRowIndex()) == 2){
             phantomPawnSquare = squaresArray[(start.getRowIndex() + end.getRowIndex())/2][start.getColIndex()];
@@ -403,7 +476,7 @@ public class Board {
     }
 
 
-    public boolean isBlockingPiece(Piece movingPiece, Square start, Square end, boolean isCastlingMove){
+    public boolean isPieceBlocked(Piece movingPiece, Square start, Square end, boolean isCastlingMove){
         switch(movingPiece.getPieceType()){
             case KING -> {
                 if(isCastlingMove){
@@ -412,8 +485,8 @@ public class Board {
                         try{
                             log.info("eh1" + getSquareAt(start.getColIndex()+1, start.getRowIndex()).getPiece());
                             log.info("eh2" + getSquareAt(start.getColIndex()+2, start.getRowIndex()).getPiece());
-                            return getSquareAt(start.getColIndex()+1, start.getRowIndex()).getPiece() == null &&
-                                    getSquareAt(start.getColIndex()+2, start.getRowIndex()).getPiece() == null;
+                            return getSquareAt(start.getColIndex()+1, start.getRowIndex()).getPiece() != null ||
+                                    getSquareAt(start.getColIndex()+2, start.getRowIndex()).getPiece() != null;
                         }catch (SquareNotFoundException e){
                             log.info("isBlockingPiece, square not found: " + e.getMsg());
                         }
@@ -421,54 +494,54 @@ public class Board {
                     }else{
                         //long castle
                         try{
-                            return getSquareAt(start.getColIndex()-1, start.getRowIndex()).getPiece() == null &&
-                                    getSquareAt(start.getColIndex()-2, start.getRowIndex()).getPiece() == null &&
-                                    getSquareAt(start.getColIndex()-3, start.getRowIndex()).getPiece() == null;
+                            return getSquareAt(start.getColIndex()-1, start.getRowIndex()).getPiece() != null ||
+                                    getSquareAt(start.getColIndex()-2, start.getRowIndex()).getPiece() != null ||
+                                    getSquareAt(start.getColIndex()-3, start.getRowIndex()).getPiece() != null;
                         }catch (SquareNotFoundException e){
                             log.info("isBlockingPiece, square not found: " + e.getMsg());
                         }
 
                     }
                 }else{
-                    return true; //king can only move 1 square, nothing is blocking his way
+                    return false; //king can only move 1 square, nothing is blocking his way
                 }
             }
             case KNIGHT -> {
-                return true; //knight skips over pieces
+                return false; //knight skips over pieces
             }
             case QUEEN -> {
                 if(start.getColIndex() == end.getColIndex()){
-                    return isClearVertically(start, end);
+                    return !isClearVertically(start, end);
                 } else if(start.getRowIndex() == end.getRowIndex()){
-                    return isClearHorizontally(start, end);
+                    return !isClearHorizontally(start, end);
                 } else{
                     //diagonal
-                    return isClearDiagonally(start, end);
+                    return !isClearDiagonally(start, end);
                 }
             }
             case ROOK -> {
                 if(start.getColIndex() == end.getColIndex()){
-                    return isClearVertically(start, end);
+                    return !isClearVertically(start, end);
                 } else if(start.getRowIndex() == end.getRowIndex()) {
-                    return isClearHorizontally(start, end);
+                    return !isClearHorizontally(start, end);
                 }
             }
             case BISHOP -> {
-                return isClearDiagonally(start, end);
+                return !isClearDiagonally(start, end);
             }
             case PAWN ->{
                 if(end.getRowIndex() - start.getRowIndex() == 2){
                     log.info("pawn moving 2 forward");
-                    return squaresArray[start.getRowIndex() + 1][start.getColIndex()].getPiece() == null &&
-                            end.getPiece() == null;
+                    return squaresArray[start.getRowIndex() + 1][start.getColIndex()].getPiece() != null ||
+                            end.getPiece() != null;
                 } else if(end.getRowIndex() - start.getRowIndex() == -2){
                     log.info("pawn moving 2 down");
-                    return squaresArray[start.getRowIndex() - 1][start.getColIndex()].getPiece() == null &&
-                            end.getPiece() == null;
+                    return squaresArray[start.getRowIndex() - 1][start.getColIndex()].getPiece() != null ||
+                            end.getPiece() != null;
                 } else if (end.getColIndex() == start.getColIndex()){
-                    return end.getPiece() == null;
+                    return end.getPiece() != null;
                 } else{
-                    return true;
+                    return false;
                 }
             }
         }
@@ -527,6 +600,7 @@ public class Board {
             if(start.getRowIndex() < end.getRowIndex()){
                 //going up
                 for(int curDiff = 1; curDiff < end.getRowIndex() - start.getRowIndex(); curDiff++){
+                    log.info("startSquare:" + start + "endSquare: " + end + "and curDiff: " + curDiff + "so we are checking at row: " + (start.getRowIndex() + curDiff) + "and col: " + (start.getColIndex() + curDiff));
                     if(squaresArray[start.getRowIndex() + curDiff][start.getColIndex() + curDiff].getPiece() != null){
                         return false;
                     }
@@ -621,7 +695,7 @@ public class Board {
     }
 
 
-    @Override
+    /*@Override
     public String toString() {
         StringBuilder desc = new StringBuilder(" \n");
         for(int i = 7; i > -1; i--){
@@ -681,6 +755,6 @@ public class Board {
             desc.append("\n");
         }
         return desc.toString();
-    }
+    }*/
 
 }

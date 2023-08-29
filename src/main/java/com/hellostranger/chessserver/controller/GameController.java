@@ -14,7 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/games")
+@RequestMapping("/api/games")
 @AllArgsConstructor
 @Slf4j
 public class GameController {

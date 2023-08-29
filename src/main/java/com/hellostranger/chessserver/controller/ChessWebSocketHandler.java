@@ -6,7 +6,7 @@ import com.hellostranger.chessserver.controller.dto.websocket.*;
 import com.hellostranger.chessserver.exceptions.*;
 import com.hellostranger.chessserver.models.enums.GameState;
 import com.hellostranger.chessserver.models.game.Game;
-import com.hellostranger.chessserver.models.game.GamePlayer;
+import com.hellostranger.chessserver.models.entities.User;
 import com.hellostranger.chessserver.service.GameService;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
@@ -41,9 +41,9 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             Game currentGame = gameService.getGameById(gameId);
 
             if(currentGame.getGameState() == GameState.ACTIVE){
-                GamePlayer p1 = currentGame.getPlayer1();
-                GamePlayer p2 = currentGame.getPlayer2();
-                GameStartMessage startMessage = new GameStartMessage(p1.getName(), p2.getName(), p1.getEmail(), p2.getEmail());
+                User whitePlayer = currentGame.getWhitePlayer();
+                User blackPlayer = currentGame.getBlackPlayer();
+                GameStartMessage startMessage = new GameStartMessage(whitePlayer, blackPlayer);
 
                 sendMessageToAllPlayers(gameId, startMessage);
             }
@@ -61,46 +61,39 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
         Gson gson = new Gson();
         Message webSocketMessage = gson.fromJson(messageJson, Message.class);
         log.info("Websocket message : " + webSocketMessage);
+        String resultMessage = "";
+        if(webSocketMessage.getMessageType() == MessageType.CONCEDE){
+            ConcedeGameMessage concedeGameMessage = gson.fromJson(messageJson, ConcedeGameMessage.class);
+            Game updatedGame;
+            if (Objects.equals(currentGame.getWhitePlayer().getEmail(), concedeGameMessage.getPlayerEmail())){
+                updatedGame = gameService.endGame(currentGame, GameState.BLACK_WIN);
+                resultMessage = "White Resigned. Black Wins!";
+            } else{
+                updatedGame = gameService.endGame(currentGame, GameState.WHITE_WIN);
+                resultMessage = "Black Resigned. White Wins!";
+            }
+            GameEndMessage endMessage = new GameEndMessage(updatedGame.getGameState(), resultMessage);
+            sendMessageToAllPlayers(gameId, endMessage);
+            return;
+        }
+
         if(webSocketMessage.getMessageType() == MessageType.MOVE){
             MoveMessage moveMessage = gson.fromJson(messageJson, MoveMessage.class);
             log.info("handle move, " + gameId + "moveMsg: " + moveMessage + "Session: " + session);
-
-            if (currentGame.getGameState() != GameState.ACTIVE) {
-                return;
-            }
-            Game updatedGame;
             boolean isCastleMove = false;
             try{
                 isCastleMove = isCastle(currentGame, moveMessage);
             } catch (SquareNotFoundException e) {
                 log.info("idk checking if castle websocket. e: " + e.getMsg());
             }
+            Game updatedGame = playMoveMessage(gameId, currentGame, moveMessage, session);
 
-            try{
-                updatedGame = gameService.makeMove(gameId, moveMessage.getPlayerEmail(),
-                        moveMessage.getStartCol(),
-                        moveMessage.getStartRow(),
-                        moveMessage.getEndCol(),
-                        moveMessage.getEndRow());
-            } catch (GameNotFoundException e){
-                log.info("Not found, error: " + e.getMsg());
-                return;
-            } catch (GameFinishedException e){
-                log.info("Game finished, error: " + e.getMsg());
-                return;
-            } catch (SquareNotFoundException e){
-                log.info("Square Not Found, error: " + e.getMsg());
-                return;
-            } catch (InvalidMoveException e){
-                log.info("Invalid Move, error: " + e.getMsg());
-                InvalidMoveMessage msg = new InvalidMoveMessage();
-                session.sendMessage(new TextMessage(gson.toJson(msg, InvalidMoveMessage.class)));
-                log.info("send: " + new TextMessage(gson.toJson(msg, InvalidMoveMessage.class)) + "to " + session);
-                return;
-            }
+
+
             if(updatedGame != null){
                 log.info("Updated game isn't null. state is: " + updatedGame.getGameState());
                 if (isCastleMove){
+                    log.info("this is a castle mvoe");
                     MoveMessage[] castleMoves = gameService.convertCastleToMoves(moveMessage);
                     sendMessageToAllPlayers(gameId, castleMoves[0]);
                     sendMessageToAllPlayers(gameId, castleMoves[1]);
@@ -110,8 +103,14 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
                 if (updatedGame.getGameState() == GameState.WHITE_WIN ||
                         updatedGame.getGameState() == GameState.BLACK_WIN ||
                         updatedGame.getGameState() == GameState.DRAW) {
-                    //either a win for one of the players or a draw
-                    GameEndMessage endMessage = new GameEndMessage(updatedGame.getGameState());
+                    if(updatedGame.getGameState() == GameState.WHITE_WIN){
+                        resultMessage = "White won by checkmate";
+                    } else if(updatedGame.getGameState() == GameState.BLACK_WIN){
+                        resultMessage = "Black won by checkmate";
+                    } else{
+                        resultMessage = "Game ended in a Draw";
+                    }
+                    GameEndMessage endMessage = new GameEndMessage(updatedGame.getGameState(), resultMessage);
                     log.info("game move list is: "+ updatedGame.getMoveList());
                     sendMessageToAllPlayers(gameId, endMessage);
                 }
@@ -165,6 +164,38 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
                 s.sendMessage(new TextMessage(gson.toJson(message)));
             }
         }
+    }
+
+    private Game playMoveMessage(String gameId, Game currentGame, MoveMessage moveMessage, WebSocketSession session) throws IOException {
+        if (currentGame.getGameState() != GameState.ACTIVE) {
+            return null;
+        }
+        Game updatedGame;
+        Gson gson = new Gson();
+
+        try{
+            updatedGame = gameService.makeMove(gameId, moveMessage.getPlayerEmail(),
+                    moveMessage.getStartCol(),
+                    moveMessage.getStartRow(),
+                    moveMessage.getEndCol(),
+                    moveMessage.getEndRow());
+        } catch (GameNotFoundException e){
+            log.info("Not found, error: " + e.getMsg());
+            return null;
+        } catch (GameFinishedException e){
+            log.info("Game finished, error: " + e.getMsg());
+            return null;
+        } catch (SquareNotFoundException e){
+            log.info("Square Not Found, error: " + e.getMsg());
+            return null;
+        } catch (InvalidMoveException e){
+            log.info("Invalid Move, error: " + e.getMsg());
+            InvalidMoveMessage msg = new InvalidMoveMessage();
+            session.sendMessage(new TextMessage(gson.toJson(msg, InvalidMoveMessage.class)));
+            log.info("send: " + new TextMessage(gson.toJson(msg, InvalidMoveMessage.class)) + "to " + session);
+            return null;
+        }
+        return updatedGame;
     }
 
 }
