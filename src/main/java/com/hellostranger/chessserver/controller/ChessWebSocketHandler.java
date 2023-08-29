@@ -6,7 +6,7 @@ import com.hellostranger.chessserver.controller.dto.websocket.*;
 import com.hellostranger.chessserver.exceptions.*;
 import com.hellostranger.chessserver.models.enums.GameState;
 import com.hellostranger.chessserver.models.game.Game;
-import com.hellostranger.chessserver.models.game.GamePlayer;
+import com.hellostranger.chessserver.models.entities.User;
 import com.hellostranger.chessserver.service.GameService;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
@@ -41,9 +41,15 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             Game currentGame = gameService.getGameById(gameId);
 
             if(currentGame.getGameState() == GameState.ACTIVE){
-                GamePlayer p1 = currentGame.getPlayer1();
-                GamePlayer p2 = currentGame.getPlayer2();
-                GameStartMessage startMessage = new GameStartMessage(p1.getName(), p2.getName(), p1.getEmail(), p2.getEmail());
+                User whitePlayer = currentGame.getWhitePlayer();
+                User blackPlayer = currentGame.getBlackPlayer();
+                GameStartMessage startMessage = new GameStartMessage(
+                        whitePlayer.getName(),
+                        blackPlayer.getName(),
+                        whitePlayer.getEmail(),
+                        blackPlayer.getEmail(),
+                        whitePlayer.getElo(),
+                        blackPlayer.getElo());
 
                 sendMessageToAllPlayers(gameId, startMessage);
             }

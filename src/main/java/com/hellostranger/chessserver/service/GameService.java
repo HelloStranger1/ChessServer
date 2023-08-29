@@ -2,13 +2,15 @@ package com.hellostranger.chessserver.service;
 
 import com.hellostranger.chessserver.controller.dto.websocket.MoveMessage;
 import com.hellostranger.chessserver.exceptions.*;
-import com.hellostranger.chessserver.models.FENRepresentation;
-import com.hellostranger.chessserver.models.GameRepresentation;
+import com.hellostranger.chessserver.models.entities.FENRepresentation;
+import com.hellostranger.chessserver.models.entities.GameRepresentation;
 import com.hellostranger.chessserver.models.enums.Color;
 import com.hellostranger.chessserver.models.enums.GameState;
 import com.hellostranger.chessserver.models.enums.PieceType;
 import com.hellostranger.chessserver.models.game.*;
-import com.hellostranger.chessserver.models.user.User;
+import com.hellostranger.chessserver.models.entities.User;
+import com.hellostranger.chessserver.storage.FENRepresentationRepository;
+import com.hellostranger.chessserver.storage.GameRespresentationRepository;
 import com.hellostranger.chessserver.storage.GameStorage;
 import com.hellostranger.chessserver.storage.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +30,12 @@ public class GameService {
 
     @Autowired
     private final UserRepository userRepository;
+
+    @Autowired
+    private final GameRespresentationRepository gameRespresentationRepository;
+
+    @Autowired
+    private final FENRepresentationRepository fenRepresentationRepository;
 
     public Game createGame(){
         Game game = new Game();
@@ -57,74 +65,69 @@ public class GameService {
         User user = userRepository.findByEmail(playerEmail)
                 .orElseThrow();
         log.info("Join game, game is: " + game + "player email is: " + playerEmail +" player is: " + user);
-        if (game.getPlayer1() != null && game.getPlayer2() != null) {
+        if (game.getWhitePlayer() != null && game.getBlackPlayer() != null) {
             throw new GameFullException("The game is already full.");
         }
 
-        if(game.getWaitingGamePlayer() != null){
+        if(game.getWaitingPlayer() != null){
             //we randomize who plays black and who plays white
             Random rnd = new Random();
             boolean isWaitingPlayerWhite = rnd.nextBoolean();
-            var newGamePlayer = GamePlayer
-                    .builder()
-                    .name(user.getName())
-                    .elo(user.getElo())
-                    .user(user)
-                    .gameRepresentation(game.getWaitingGamePlayer().getGameRepresentation())
-                    .build();
+
             if(isWaitingPlayerWhite){
-                game.setPlayer1(game.getWaitingGamePlayer());
-                game.getPlayer1().setColor(Color.WHITE);
-                newGamePlayer.setColor(Color.BLACK);
+                game.setWhitePlayer(game.getWaitingPlayer());
 
-                newGamePlayer.getGameRepresentation().addPlayer(newGamePlayer);
-                log.info("newGamePlayer is: " + newGamePlayer + " and the gameRepresentation is: " + newGamePlayer.getGameRepresentation());
+                game.setBlackPlayer(user);
 
-                user.addGamePlayer(newGamePlayer);
-                log.info("user of newGamePlayer is: " + user + "and users gameHistory is: " + user.getGamesHistory());
+                log.info("user of newGamePlayer is: " + user + "and users whiteGameHistory is: " + user.getWhiteGamesHistory() + "and the black: " + user.getBlackGamesHistory());
 
-                game.setPlayer2(newGamePlayer);
+                /*game.setBlackPlayer(newGamePlayer);*/
             }else{
-                game.setPlayer2(game.getWaitingGamePlayer());
-                game.getPlayer2().setColor(Color.BLACK);
-                newGamePlayer.setColor(Color.WHITE);
-                newGamePlayer.getGameRepresentation().addPlayer(newGamePlayer);
-                log.info("newGamePlayer is: " + newGamePlayer + " and the gameRepresentation is: " + newGamePlayer.getGameRepresentation());
+                game.setBlackPlayer(game.getWaitingPlayer());
 
-                user.addGamePlayer(newGamePlayer);
-                log.info("user of newGamePlayer is: " + user + "and users gameHistory is: " + user.getGamesHistory());
+                game.setWhitePlayer(user);
 
-                game.setPlayer1(newGamePlayer);
+                log.info("user of newGamePlayer is: " + user + "and users whiteGameHistory is: " + user.getWhiteGamesHistory() + "and the black: " + user.getBlackGamesHistory());
+
+
             }
             //since we have 2 players, we reset waitingPlayer to null
-            game.setWaitingGamePlayer(null);
+            game.setWaitingPlayer(null);
         } else{
-            //we set the new player as the waiting player.
-            var newGamePlayer = GamePlayer
-                    .builder()
-                    .name(user.getName())
-                    .elo(user.getElo())
-                    .user(user)
-                    .gameRepresentation(new GameRepresentation())
-                    .build();
-            user.addGamePlayer(newGamePlayer);
-            newGamePlayer.getGameRepresentation().addPlayer(newGamePlayer);
-            game.setWaitingGamePlayer(newGamePlayer);
+
+            game.setWaitingPlayer(user);
         }
 
         if(game.getIsP1turn() == null){
             game.setIsP1turn(true);
         }
 
-        if(game.getPlayer1() != null && game.getPlayer2() != null){
+        if(game.getWhitePlayer() != null && game.getBlackPlayer() != null){
             game.setGameState(GameState.ACTIVE);
-            game.getPlayer1().setGameState(GameState.ACTIVE);
-            game.getPlayer2().setGameState(GameState.ACTIVE);
+
+            GameRepresentation gameRepresentation = new GameRepresentation();
+            gameRepresentation.setWhitePlayer(game.getWhitePlayer());
+            gameRepresentation.setBlackPlayer(game.getBlackPlayer());
+
+            FENRepresentation FEN = FENRepresentation
+                    .builder()
+                    .FEN(convertGameToFEN(game))
+                    .game(gameRepresentation)
+                    .build();
+
+            gameRepresentation.addFENRepresentation(FEN);
+            gameRespresentationRepository.save(gameRepresentation);
+            fenRepresentationRepository.save(FEN);
+            game.setGameRepresentation(new GameRepresentation());
+
+
+
+
         } else{
             game.setGameState(GameState.WAITING);
         }
 
-        log.info("Game players: p1 " + game.getPlayer1() + " p2: " + game.getPlayer2());
+        log.info("Game players: p1 " + game.getWhitePlayer() + " p2: " + game.getBlackPlayer());
         return game;
 
     }
@@ -132,21 +135,25 @@ public class GameService {
     public Game makeMove(String gameId, String playerEmail, int startCol, int startRow,int endCol, int endRow)
             throws InvalidMoveException, GameFinishedException, SquareNotFoundException, GameNotFoundException {
         Game game = getGameById(gameId);
-
+        boolean isUserWhite = Objects.equals(playerEmail, game.getWhitePlayer().getEmail());
+        log.info("isPlaying white: " + isUserWhite);
         if (game.getGameState() != GameState.ACTIVE) {
             throw new GameFinishedException("The game has already finished.");
         }
 
-        GamePlayer gamePlayer = getPlayer(game, playerEmail);
-        if (gamePlayer == null) {
+
+        User user = getPlayer(game, playerEmail);
+        if (user == null) {
             throw new InvalidMoveException("you are not a player in this game.");
         }
-        if(!checkIfIsPlayersTurn(game, gamePlayer)){
+        if(!checkIfIsPlayersTurn(game, user)){
             throw new InvalidMoveException("not your turn");
         }
         Square startSquare = game.getBoard().getSquareAt(startCol, startRow);
-        if(startSquare.getPiece() == null || startSquare.getPiece().getColor() != gamePlayer.getColor()){
-            throw new InvalidMoveException("Piece doesn't exist at that square or its not yours");
+        if(startSquare.getPiece() == null ){
+            throw new InvalidMoveException("No piece at that square");
+        }else if( (startSquare.getPiece().getColor() == Color.WHITE) != isUserWhite){
+            throw new InvalidMoveException("Piece at that square is not yours. the piece is: " + startSquare.getPiece() + "and your color is: " + isUserWhite);
         }
 
         Square endSquare = game.getBoard().getSquareAt(endCol, endRow);
@@ -173,29 +180,47 @@ public class GameService {
         }
         game.setHalfMoves(game.getHalfMoves() + 1);
         GameState state = checkGameState(game);
-        GamePlayer p1 = game.getPlayer1();
-        GamePlayer p2 = game.getPlayer2();
         game.setGameState(state);
-        p1.setGameState(state);
-        p2.setGameState(state);
         game.addMove(new Move(startCol, startRow, endCol, endRow));
-        String FEN = convertGameToFEN(game);
-        p1.getGameRepresentation().addFENRepresentation(FEN);
-        User p1User = userRepository.findByEmail(p1.getEmail())
-                .orElseThrow();
-        log.info("p1User is: " + p1User);
-        log.info("p1 is: " + p1);
-        log.info("gameRep is: " + p1.getGameRepresentation());
-        User p2User = userRepository.findByEmail(p2.getEmail())
-                .orElseThrow();
-        p1User.addGamePlayer(p1);
-        p2User.addGamePlayer(p2);
-        userRepository.save(p1User);
-        userRepository.save(p2User);
+        FENRepresentation FEN = FENRepresentation
+                .builder()
+                .FEN(convertGameToFEN(game))
+                .game(game.getGameRepresentation())
+                .build();
+        game.getGameRepresentation().addFENRepresentation(FEN);
+        gameRespresentationRepository.save(game.getGameRepresentation());
+        fenRepresentationRepository.save(FEN);
+
+        //TODO: Extract the code below to an "On Game End" function
+        if(game.getGameState() == GameState.WHITE_WIN || game.getGameState() == GameState.BLACK_WIN || game.getGameState() == GameState.DRAW){
+            onGameEnding(game.getWhitePlayer(), game.getBlackPlayer(), game.getGameState(), game);
+        }
         log.info("makeMove, game: " + game );
         return game;
     }
 
+    public void onGameEnding(User whitePlayer, User blackPlayer, GameState gameResult,Game game){
+        GameRepresentation gameRepresentation = game.getGameRepresentation();
+        whitePlayer.addGameToWhiteGameHistory(gameRepresentation);
+        blackPlayer.addGameToBlackGameHistory(gameRepresentation);
+        updateEloScores(game);
+        whitePlayer.setTotalGames(game.getWhitePlayer().getTotalGames() + 1);
+        blackPlayer.setTotalGames(game.getBlackPlayer().getTotalGames() + 1);
+        if(gameResult == GameState.WHITE_WIN){
+            whitePlayer.setGamesWon(whitePlayer.getGamesWon() + 1);
+            blackPlayer.setGamesLost(blackPlayer.getGamesLost() + 1);
+        } else if(gameResult == GameState.BLACK_WIN){
+            blackPlayer.setGamesWon(blackPlayer.getGamesWon() + 1);
+            whitePlayer.setGamesLost(whitePlayer.getGamesLost() + 1);
+        } else if (gameResult == GameState.DRAW) {
+            whitePlayer.setGamesDrawn(whitePlayer.getGamesDrawn() + 1);
+            blackPlayer.setGamesDrawn(blackPlayer.getGamesDrawn() + 1);
+        }
+
+        userRepository.save(whitePlayer);
+        userRepository.save(blackPlayer);
+        gameRespresentationRepository.save(game.getGameRepresentation());
+    }
     public boolean isCastle(Game game, Square startSquare, Square endSquare){
         return game.getBoard().isCastlingMove(startSquare, endSquare);
     }
@@ -248,6 +273,24 @@ public class GameService {
             }
         }
     }
+    public void updateEloScores(Game game){
+        //receives a finished game, updated the elo of the players who played in it.
+        User white = game.getWhitePlayer(), black = game.getBlackPlayer();
+        int whiteElo = white.getElo(), blackELo = black.getElo();
+        if(game.getGameState() == GameState.DRAW){
+            white.setElo(EloCalculator.calculateEloAfterDraw(whiteElo, blackELo));
+            black.setElo(EloCalculator.calculateEloAfterDraw(blackELo, whiteElo));
+        } else if(game.getGameState() == GameState.WHITE_WIN){
+            white.setElo(EloCalculator.calculateEloAfterWin(whiteElo, blackELo));
+            black.setElo(EloCalculator.calculateEloAfterLoss(blackELo, whiteElo));
+        } else if(game.getGameState() == GameState.BLACK_WIN){
+            white.setElo(EloCalculator.calculateEloAfterLoss(whiteElo, blackELo));
+            black.setElo(EloCalculator.calculateEloAfterWin(blackELo, whiteElo));
+        }
+
+    }
+
+
     public Game getGameById(String gameId) throws GameNotFoundException {
         Game game = GameStorage.getInstance().getGames().get(gameId);
         if (game == null) {
@@ -256,19 +299,19 @@ public class GameService {
         return game;
     }
 
-    private boolean checkIfIsPlayersTurn(Game game, GamePlayer gamePlayer){
-        if(game.getPlayer1() == gamePlayer){
+    private boolean checkIfIsPlayersTurn(Game game, User player){
+        if(Objects.equals(game.getWhitePlayer().getEmail(), player.getEmail())){
             return game.getIsP1turn();
         } else{
             return !game.getIsP1turn();
         }
     }
 
-    private GamePlayer getPlayer(Game game, String playerEmail) {
-        if(Objects.equals(game.getPlayer1().getEmail(), playerEmail)){
-            return game.getPlayer1();
-        } else if(Objects.equals(game.getPlayer2().getEmail(), playerEmail)){
-            return game.getPlayer2();
+    private User getPlayer(Game game, String playerEmail) {
+        if(Objects.equals(game.getWhitePlayer().getEmail(), playerEmail)){
+            return game.getWhitePlayer();
+        } else if(Objects.equals(game.getBlackPlayer().getEmail(), playerEmail)){
+            return game.getBlackPlayer();
         }
         return null;
     }

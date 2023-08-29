@@ -1,6 +1,6 @@
 package com.hellostranger.chessserver.storage;
 
-import com.hellostranger.chessserver.models.user.User;
+import com.hellostranger.chessserver.models.entities.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

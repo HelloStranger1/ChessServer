@@ -1,7 +1,9 @@
 package com.hellostranger.chessserver.models.game;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.hellostranger.chessserver.models.entities.GameRepresentation;
 import com.hellostranger.chessserver.models.enums.GameState;
+import com.hellostranger.chessserver.models.entities.User;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -15,14 +17,13 @@ public class Game {
     private Board board;
 
     @JsonIgnore
-    private GamePlayer player1;
+    private User whitePlayer;
 
     @JsonIgnore
-    private GamePlayer player2;
-
+    private User blackPlayer;
 
     @JsonIgnore
-    private GamePlayer waitingGamePlayer;
+    private User waitingPlayer;
     private Boolean isP1turn;
 
     private GameState gameState;
@@ -33,6 +34,8 @@ public class Game {
 
     private Integer fullMoves = 0;
 
+    @JsonIgnore
+    private GameRepresentation gameRepresentation = null;
     public void addMove(Move move){
         if(moveList == null){
             moveList = new ArrayList<>();
