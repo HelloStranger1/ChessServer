@@ -29,14 +29,13 @@ public class Board {
     @JsonIgnore
     private Piece blackKing;
 
-
+    @JsonIgnore
     private Square phantomPawnSquare; //for en passant.
 
     @Override
     public String toString() {
         return "Board{" +
                 "squaresArray=" + Arrays.toString(squaresArray) +
-                ", phantomPawnSquare=" + phantomPawnSquare +
                 '}';
     }
 
@@ -405,9 +404,6 @@ public class Board {
                 Square currentSquare = squaresArray[row][col];
                 Piece piece = currentSquare.getPiece();
                 if(piece != null && isWhite != (piece.getColor() == Color.WHITE)){
-                    if(piece.getPieceType() == PieceType.QUEEN){
-                        log.info("king is at: " + kingSquare + ". queen is at: " + currentSquare + ". is Queen blocked? " + isPieceBlocked(piece, currentSquare, kingSquare, false) + ". can the queen make the move: " + piece.canMakeMove(currentSquare, kingSquare));
-                    }
                     if(piece.canMakeMove(currentSquare, kingSquare) && !isPieceBlocked(piece, currentSquare, kingSquare, false)){
                         log.info("\n \n isKingInCheck king is in check. by piece: \n" + piece + "\n \n");
                         return true;

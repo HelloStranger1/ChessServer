@@ -96,6 +96,8 @@ public class UserController {
     }
 
 
+
+
     @PostMapping("/{userEmail}/send-friend-request")
     public ResponseEntity<String> sendFriendRequest(
             @PathVariable("userEmail") String userEmail,

@@ -139,7 +139,7 @@ public class Piece {
 
         int colDiff = Math.abs(currentSquare.getColIndex() - targetSquare.getColIndex());
         int rowDiff = Math.abs(currentSquare.getRowIndex() - targetSquare.getRowIndex());
-
+        log.info(String.valueOf(" can bishop move?" + colDiff==rowDiff + " from " + currentSquare + "to square" + targetSquare));
         return colDiff == rowDiff;
     }
 

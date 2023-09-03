@@ -21,7 +21,6 @@ public class GameHistoryResponse {
     private LocalDate gameDate;
     private Color opponentColor;
     private GameState result;
-
     private List<String> boardsHistoryFEN;
 
 

@@ -3,6 +3,9 @@ package com.hellostranger.chessserver.models.entities;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.Type;
+
+import java.util.List;
 
 @Entity
 @Getter
@@ -15,6 +18,7 @@ public class BoardRepresentation {
     @GeneratedValue
     private Integer id;
 
+    @Column(columnDefinition = "TEXT")
     private String boardJson;
 
     @ManyToOne
@@ -24,7 +28,7 @@ public class BoardRepresentation {
 
     @Override
     public String toString(){
-        return "Id: " + id + "FEN: " + boardJson;
+        return "Id: " + id + "boards: " + boardJson;
     }
 
 

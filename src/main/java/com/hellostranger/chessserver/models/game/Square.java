@@ -12,7 +12,7 @@ public class Square {
 
 
     @JsonIgnore
-    private Board board;
+    private transient Board board;
 
     private Piece piece;
 
