@@ -44,7 +44,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
                 User whitePlayer = currentGame.getWhitePlayer();
                 User blackPlayer = currentGame.getBlackPlayer();
                 GameStartMessage startMessage = new GameStartMessage(
-                        whitePlayer, blackPlayer);
+                       whitePlayer, blackPlayer);
 
                 sendMessageToAllPlayers(gameId, startMessage);
             }

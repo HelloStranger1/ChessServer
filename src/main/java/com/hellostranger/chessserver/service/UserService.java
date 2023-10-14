@@ -22,7 +22,7 @@ public class UserService {
 
     @Autowired
     GameRepresentationRepository gameRepresentationRepository;
-
+  
     public User getUserByEmail(String userEmail) throws NoSuchElementException {
         return userRepository.findByEmail(userEmail).orElseThrow();
     }

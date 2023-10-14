@@ -4,6 +4,7 @@ import com.hellostranger.chessserver.controller.dto.GameHistoryResponse;
 import com.hellostranger.chessserver.controller.dto.UpdateRequest;
 import com.hellostranger.chessserver.models.entities.FriendRequest;
 import com.hellostranger.chessserver.models.entities.GameRepresentation;
+
 import com.hellostranger.chessserver.models.entities.User;
 import com.hellostranger.chessserver.service.FriendRequestService;
 import com.hellostranger.chessserver.service.UserService;
@@ -94,8 +95,6 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorMessage);
         }
     }
-
-
 
 
     @PostMapping("/{userEmail}/send-friend-request")

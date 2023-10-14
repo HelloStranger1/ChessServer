@@ -26,6 +26,7 @@ public class GameStartMessage extends Message {
         this.blackPlayerImage = blackPlayer.getImage();
         this.blackElo = blackPlayer.getElo();
         this.whiteElo = whitePlayer.getElo();
+
     }
 
     @Override
