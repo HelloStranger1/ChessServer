@@ -1,7 +1,7 @@
 package com.hellostranger.chessserver.service;
 
 import com.hellostranger.chessserver.controller.dto.GameHistoryResponse;
-import com.hellostranger.chessserver.models.entities.BoardRepresentation;
+import com.hellostranger.chessserver.models.entities.MoveRepresentation;
 import com.hellostranger.chessserver.models.entities.GameRepresentation;
 import com.hellostranger.chessserver.models.entities.User;
 import com.hellostranger.chessserver.models.enums.Color;
@@ -34,31 +34,36 @@ public class UserService {
     public List<GameHistoryResponse> getUsersGameHistory(User user){
         List<GameRepresentation> gamesHistory = gameRepresentationRepository.findByWhitePlayerOrBlackPlayerOrderByDateDesc(user, user).orElse(new ArrayList<>());
         List<GameHistoryResponse> response = new ArrayList<>();
-        for(int i = 0; i < gamesHistory.size(); i++){
-            GameRepresentation gameRepresentation = gamesHistory.get(i);
-            User opponent;
+        for (GameRepresentation gameRepresentation : gamesHistory) {
+            User blackPlayer = gameRepresentation.getBlackPlayer();
+            User whitePlayer = gameRepresentation.getWhitePlayer();
             Color opponentColor;
-            if(gameRepresentation.getWhitePlayer() == user){
-                opponent = gameRepresentation.getBlackPlayer();
+            if (whitePlayer == user) {
                 opponentColor = Color.BLACK;
 
-            } else{
-                opponent = gameRepresentation.getWhitePlayer();
+            } else {
                 opponentColor = Color.WHITE;
             }
-            String opponentImage = opponent.getImage(), opponentName = opponent.getName();
-            Integer opponentElo = opponent.getElo();
-            List<String> FENStrings = gameRepresentation.getBoardRepresentations().stream().map(BoardRepresentation::getBoardJson).toList();
+            StringBuilder gameMoves = new StringBuilder();
+            List<MoveRepresentation> moves = gameRepresentation.getMoveRepresentations();
+            for (MoveRepresentation move : moves) {
+                gameMoves.append(move.toString());
+            }
+
             response.add(
-                    GameHistoryResponse.builder()
-                            .id(gameRepresentation.getId())
-                            .boardsHistoryFEN(FENStrings)
-                            .opponentColor(opponentColor)
-                            .opponentElo(opponentElo)
-                            .opponentImage(opponentImage)
-                            .opponentName(opponentName)
+                    GameHistoryResponse
+                            .builder()
+                            .whiteImage(whitePlayer.getImage())
+                            .blackImage(blackPlayer.getImage())
+                            .whiteName(whitePlayer.getName())
+                            .blackName(blackPlayer.getName())
+                            .whiteElo(whitePlayer.getElo())
+                            .blackElo(blackPlayer.getElo())
+                            .startBoardJson(gameRepresentation.getStartBoardJson())
+                            .gameDate(gameRepresentation.getDate())
                             .result(gameRepresentation.getResult())
-                            .gameDate(LocalDate.now())
+                            .opponentColor(opponentColor)
+                            .gameMoves(gameMoves.toString())
                             .build()
             );
         }

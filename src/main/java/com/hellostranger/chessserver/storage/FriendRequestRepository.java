@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 import java.util.Optional;
 
+
 public interface FriendRequestRepository extends JpaRepository<FriendRequest, Integer> {
     Optional<List<FriendRequest>> findByRecipientAndStatus(User recipient, RequestStatus status);
 }

@@ -86,9 +86,6 @@ public class UserController {
         try{
             User user = userService.getUserByEmail(userEmail);
             List<GameHistoryResponse> games = userService.getUsersGameHistory(user);
-            for(int i = 0; i < games.size(); i++){
-                log.info("GamesHistoryResponse FEN at " + i + " is: " + games.get(i).getBoardsHistoryFEN());
-            }
             return ResponseEntity.ok(games);
         } catch (NoSuchElementException e){
             String errorMessage = "User with email " + userEmail + " not found.";

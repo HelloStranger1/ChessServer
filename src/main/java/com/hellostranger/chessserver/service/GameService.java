@@ -3,14 +3,14 @@ package com.hellostranger.chessserver.service;
 import com.google.gson.Gson;
 import com.hellostranger.chessserver.controller.dto.websocket.MoveMessage;
 import com.hellostranger.chessserver.exceptions.*;
-import com.hellostranger.chessserver.models.entities.BoardRepresentation;
+import com.hellostranger.chessserver.models.entities.MoveRepresentation;
 import com.hellostranger.chessserver.models.entities.GameRepresentation;
 import com.hellostranger.chessserver.models.enums.Color;
 import com.hellostranger.chessserver.models.enums.GameState;
 import com.hellostranger.chessserver.models.enums.PieceType;
 import com.hellostranger.chessserver.models.game.*;
 import com.hellostranger.chessserver.models.entities.User;
-import com.hellostranger.chessserver.storage.BoardRepresentationRepository;
+import com.hellostranger.chessserver.storage.MoveRepresentationRepository;
 import com.hellostranger.chessserver.storage.GameRepresentationRepository;
 import com.hellostranger.chessserver.storage.GameStorage;
 import com.hellostranger.chessserver.storage.UserRepository;
@@ -36,7 +36,7 @@ public class GameService {
     private final GameRepresentationRepository gameRespresentationRepository;
 
     @Autowired
-    private final BoardRepresentationRepository boardRepresentationRepository;
+    private final MoveRepresentationRepository moveRepresentationRepository;
 
     public Game createGame(){
         Game game = new Game();
@@ -110,17 +110,11 @@ public class GameService {
             gameRepresentation.setWhitePlayer(game.getWhitePlayer());
             gameRepresentation.setBlackPlayer(game.getBlackPlayer());
             Gson gson = new Gson();
+            gameRepresentation.setStartBoardJson(gson.toJson(game.getBoard()));
             log.info("board is " + game.getBoard());
-            BoardRepresentation boardRepresentation = BoardRepresentation
-                    .builder()
-                    .boardJson(gson.toJson(game.getBoard()))
-                    .game(gameRepresentation)
-                    .build();
 
-            gameRepresentation.addBoardRepresentation(boardRepresentation);
             gameRespresentationRepository.save(gameRepresentation);
-            boardRepresentationRepository.save(boardRepresentation);
-            game.setGameRepresentation(new GameRepresentation());
+            game.setGameRepresentation(gameRepresentation);
 
 
 
@@ -159,9 +153,11 @@ public class GameService {
         }
 
         Square endSquare = game.getBoard().getSquareAt(endCol, endRow);
+        boolean isCastleMove = false;
         if (game.getBoard().isValidMove(startSquare, endSquare)) {
             log.info("GameService, move is legal");
             if(isCastle(game, startSquare, endSquare)){
+                isCastleMove = true;
                 game.getBoard().makeCastlingMove(startSquare, endSquare);
             }else{
                 if( startSquare.getPiece().getPieceType() == PieceType.PAWN ||
@@ -183,18 +179,45 @@ public class GameService {
         game.setHalfMoves(game.getHalfMoves() + 1);
         GameState state = checkGameState(game);
         game.setGameState(state);
-        game.addMove(new Move(startCol, startRow, endCol, endRow));
-        Gson gson = new Gson();
-        BoardRepresentation boardRepresentation = BoardRepresentation
-                .builder()
-                .boardJson(gson.toJson(game.getBoard()))
-                .game(game.getGameRepresentation())
-                .build();
-        game.getGameRepresentation().addBoardRepresentation(boardRepresentation);
-        gameRespresentationRepository.save(game.getGameRepresentation());
-        boardRepresentationRepository.save(boardRepresentation);
 
-        //TODO: Extract the code below to an "On Game End" function
+        game.addMove(new Move(startCol, startRow, endCol, endRow));
+
+        if(isCastleMove){
+            MoveMessage[] castleMoves = convertCastleToMoves(new MoveMessage(playerEmail, startCol, startRow, endCol, endRow));
+            MoveRepresentation move1 = MoveRepresentation
+                    .builder()
+                    .startCol(castleMoves[0].getStartCol())
+                    .endCol(castleMoves[0].getEndCol())
+                    .startRow(castleMoves[0].getStartRow())
+                    .endRow(castleMoves[0].getEndRow())
+                    .build();
+            MoveRepresentation move2 = MoveRepresentation
+                    .builder()
+                    .startCol(castleMoves[1].getStartCol())
+                    .endCol(castleMoves[1].getEndCol())
+                    .startRow(castleMoves[1].getStartRow())
+                    .endRow(castleMoves[1].getEndRow())
+                    .build();
+            game.getGameRepresentation().addMoveRepresentation(move1);
+            game.getGameRepresentation().addMoveRepresentation(move2);
+            /*gameRespresentationRepository.save(game.getGameRepresentation());*/
+            moveRepresentationRepository.save(move1);
+            moveRepresentationRepository.save(move2);
+        }else{
+            MoveRepresentation moveRepresentation = MoveRepresentation
+                    .builder()
+                    .startCol(startCol)
+                    .endCol(endCol)
+                    .startRow(startRow)
+                    .endRow(endRow)
+                    .build();
+
+            game.getGameRepresentation().addMoveRepresentation(moveRepresentation);
+            /*gameRespresentationRepository.save(game.getGameRepresentation());*/
+            moveRepresentationRepository.save(moveRepresentation);
+
+        }
+
         if(game.getGameState() == GameState.WHITE_WIN || game.getGameState() == GameState.BLACK_WIN || game.getGameState() == GameState.DRAW){
             onGameEnding(game.getWhitePlayer(), game.getBlackPlayer(), game.getGameState(), game);
         }
@@ -204,25 +227,31 @@ public class GameService {
 
     public void onGameEnding(User whitePlayer, User blackPlayer, GameState gameResult,Game game){
         GameRepresentation gameRepresentation = game.getGameRepresentation();
+        gameRepresentation.setResult(gameResult);
         whitePlayer.addGameToWhiteGameHistory(gameRepresentation);
         blackPlayer.addGameToBlackGameHistory(gameRepresentation);
-        updateEloScores(game);
         whitePlayer.setTotalGames(game.getWhitePlayer().getTotalGames() + 1);
         blackPlayer.setTotalGames(game.getBlackPlayer().getTotalGames() + 1);
         if(gameResult == GameState.WHITE_WIN){
+            whitePlayer.setElo(EloCalculator.calculateEloAfterWin(whitePlayer.getElo(), blackPlayer.getElo()));
+            blackPlayer.setElo(EloCalculator.calculateEloAfterLoss(blackPlayer.getElo(), whitePlayer.getElo()));
             whitePlayer.setGamesWon(whitePlayer.getGamesWon() + 1);
             blackPlayer.setGamesLost(blackPlayer.getGamesLost() + 1);
         } else if(gameResult == GameState.BLACK_WIN){
+            whitePlayer.setElo(EloCalculator.calculateEloAfterLoss(whitePlayer.getElo(), blackPlayer.getElo()));
+            blackPlayer.setElo(EloCalculator.calculateEloAfterWin(blackPlayer.getElo(), whitePlayer.getElo()));
             blackPlayer.setGamesWon(blackPlayer.getGamesWon() + 1);
             whitePlayer.setGamesLost(whitePlayer.getGamesLost() + 1);
         } else if (gameResult == GameState.DRAW) {
+            whitePlayer.setElo(EloCalculator.calculateEloAfterDraw(whitePlayer.getElo(), blackPlayer.getElo()));
+            blackPlayer.setElo(EloCalculator.calculateEloAfterDraw(blackPlayer.getElo(), whitePlayer.getElo()));
             whitePlayer.setGamesDrawn(whitePlayer.getGamesDrawn() + 1);
             blackPlayer.setGamesDrawn(blackPlayer.getGamesDrawn() + 1);
         }
 
         userRepository.save(whitePlayer);
         userRepository.save(blackPlayer);
-        gameRespresentationRepository.save(game.getGameRepresentation());
+        /*gameRespresentationRepository.save(game.getGameRepresentation());*/
     }
     public boolean isCastle(Game game, Square startSquare, Square endSquare){
         return game.getBoard().isCastlingMove(startSquare, endSquare);

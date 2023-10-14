@@ -33,15 +33,19 @@ public class GameRepresentation {
 
     private LocalDate date = LocalDate.now();
 
-    @OneToMany(mappedBy = "game", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
-    private List<BoardRepresentation> BoardRepresentations;
+    @Column(columnDefinition = "TEXT")
+    private String startBoardJson;
 
-    public void addBoardRepresentation(BoardRepresentation boardRepresentation){
-        if(this.BoardRepresentations == null){
-            this.BoardRepresentations = new ArrayList<>();
+    @OneToMany(/*mappedBy = "game", */fetch = FetchType.EAGER, cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "game_representation_id")
+    private List<MoveRepresentation> moveRepresentations;
+
+    public void addMoveRepresentation(MoveRepresentation moveRepresentation){
+        if(this.moveRepresentations == null){
+            this.moveRepresentations = new ArrayList<>();
         }
 
-        this.BoardRepresentations.add(boardRepresentation);
+        this.moveRepresentations.add(moveRepresentation);
 
     }
 

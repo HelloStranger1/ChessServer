@@ -15,13 +15,17 @@ import java.util.List;
 @Builder
 public class GameHistoryResponse {
     private Integer id;
-    private String opponentImage;
-    private String opponentName;
-    private Integer opponentElo;
+    private String whiteImage;
+    private String blackImage;
+    private String whiteName;
+    private String blackName;
+    private Integer whiteElo;
+    private Integer blackElo;
     private LocalDate gameDate;
     private Color opponentColor;
     private GameState result;
-    private List<String> boardsHistoryFEN;
+    private String startBoardJson;
+    private String gameMoves;
 
 
 }

@@ -2,7 +2,7 @@ package com.hellostranger.chessserver.config;
 
 import com.hellostranger.chessserver.controller.ChessWebSocketHandler;
 import com.hellostranger.chessserver.service.GameService;
-import com.hellostranger.chessserver.storage.BoardRepresentationRepository;
+import com.hellostranger.chessserver.storage.MoveRepresentationRepository;
 import com.hellostranger.chessserver.storage.GameRepresentationRepository;
 import com.hellostranger.chessserver.storage.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +20,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     private final UserRepository userRepository;
     private final GameRepresentationRepository gameRepresentationRepository;
-    private final BoardRepresentationRepository boardRepresentationRepository;
+    private final MoveRepresentationRepository moveRepresentationRepository;
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(chessWebSocketHandler(), "/chess/{gameId}").setAllowedOrigins("*");
@@ -28,6 +28,6 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     @Bean
     public WebSocketHandler chessWebSocketHandler() {
-        return new ChessWebSocketHandler(new GameService(userRepository, gameRepresentationRepository, boardRepresentationRepository));
+        return new ChessWebSocketHandler(new GameService(userRepository, gameRepresentationRepository, moveRepresentationRepository));
     }
 }

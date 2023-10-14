@@ -120,13 +120,25 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
                 log.info("\n \n Updated game is null ?!?!?!?!?! \n \n");
             }
 
-
         } else if(webSocketMessage.getMessageType() == MessageType.START){
             GameStartMessage startMessage = gson.fromJson(messageJson, GameStartMessage.class);
             sendMessageToAllPlayers(gameId, startMessage);
         } else if(webSocketMessage.getMessageType() == MessageType.END){
             GameEndMessage endMessage = gson.fromJson(messageJson, GameEndMessage.class);
             sendMessageToAllPlayers(gameId, endMessage);
+        } else if (webSocketMessage.getMessageType() == MessageType.CONCEDE) {
+            ConcedeGameMessage concedeGameMessage = gson.fromJson(messageJson, ConcedeGameMessage.class);
+            if (concedeGameMessage.getPlayerEmail() == currentGame.getWhitePlayer().getEmail()){
+                log.info("White resigned. message email: " + concedeGameMessage.getPlayerEmail() + "and black email: "+ currentGame.getBlackPlayer().getEmail() + "and white's:" + currentGame.getWhitePlayer().getEmail());
+                gameService.onGameEnding(currentGame.getWhitePlayer(), currentGame.getBlackPlayer(), GameState.BLACK_WIN, currentGame);
+                GameEndMessage endMessage = new GameEndMessage(GameState.BLACK_WIN, "Black won by resignation");
+                sendMessageToAllPlayers(gameId, endMessage);
+            } else{
+                log.info("Black resigned. message email: " + concedeGameMessage.getPlayerEmail() + "and black email: "+ currentGame.getBlackPlayer().getEmail() + "and white's:" + currentGame.getWhitePlayer().getEmail());
+                gameService.onGameEnding(currentGame.getWhitePlayer(), currentGame.getBlackPlayer(), GameState.WHITE_WIN, currentGame);
+                GameEndMessage endMessage = new GameEndMessage(GameState.WHITE_WIN, "White won by resignation");
+                sendMessageToAllPlayers(gameId, endMessage);
+            }
         }
 
     }
