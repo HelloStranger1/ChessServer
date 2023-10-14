@@ -44,12 +44,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
                 User whitePlayer = currentGame.getWhitePlayer();
                 User blackPlayer = currentGame.getBlackPlayer();
                 GameStartMessage startMessage = new GameStartMessage(
-                        whitePlayer.getName(),
-                        blackPlayer.getName(),
-                        whitePlayer.getEmail(),
-                        blackPlayer.getEmail(),
-                        whitePlayer.getElo(),
-                        blackPlayer.getElo());
+                       whitePlayer, blackPlayer);
 
                 sendMessageToAllPlayers(gameId, startMessage);
             }
@@ -117,7 +112,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
                         updatedGame.getGameState() == GameState.BLACK_WIN ||
                         updatedGame.getGameState() == GameState.DRAW) {
                     //either a win for one of the players or a draw
-                    GameEndMessage endMessage = new GameEndMessage(updatedGame.getGameState());
+                    GameEndMessage endMessage = new GameEndMessage(updatedGame.getGameState(), "Someone won");
                     log.info("game move list is: "+ updatedGame.getMoveList());
                     sendMessageToAllPlayers(gameId, endMessage);
                 }

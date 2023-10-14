@@ -4,9 +4,15 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.hellostranger.chessserver.models.enums.Color;
 import com.hellostranger.chessserver.models.enums.PieceType;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-@Data
+
+@Getter
+@Setter
+@EqualsAndHashCode
 @Slf4j
 public class Piece {
 
@@ -23,8 +29,16 @@ public class Piece {
     private int rowIndex;
 
 
-
-
+    @Override
+    public String toString() {
+        return "Piece{" +
+                "color=" + color +
+                ", pieceType=" + pieceType +
+                ", hasMoved=" + hasMoved +
+                ", colIndex=" + colIndex +
+                ", rowIndex=" + rowIndex +
+                '}';
+    }
 
     public Piece(Color color, PieceType type, Boolean hasMoved, Square currentSquare){
         this.color = color;
@@ -89,7 +103,7 @@ public class Piece {
 
         int x = Math.abs(currentSquare.getColIndex() - targetSquare.getColIndex());
         int y = Math.abs(currentSquare.getRowIndex() - targetSquare.getRowIndex());
-        return x + y == 1;
+        return x < 2 && y < 2 && x+y != 0;
     }
 
     private Boolean canQueenMove(Square currentSquare, Square targetSquare) {
@@ -99,7 +113,9 @@ public class Piece {
 
         int colDiff = Math.abs(targetSquare.getColIndex() - currentSquare.getColIndex());
         int rowDiff = Math.abs(targetSquare.getRowIndex() - currentSquare.getRowIndex());
-
+        if(colDiff == 0 || rowDiff == 0 || colDiff == rowDiff){
+            log.info("Queen can move from ");
+        }
         return colDiff == 0 || rowDiff == 0 || colDiff == rowDiff;
     }
 
@@ -123,7 +139,7 @@ public class Piece {
 
         int colDiff = Math.abs(currentSquare.getColIndex() - targetSquare.getColIndex());
         int rowDiff = Math.abs(currentSquare.getRowIndex() - targetSquare.getRowIndex());
-
+        log.info(String.valueOf(" can bishop move?" + colDiff==rowDiff + " from " + currentSquare + "to square" + targetSquare));
         return colDiff == rowDiff;
     }
 

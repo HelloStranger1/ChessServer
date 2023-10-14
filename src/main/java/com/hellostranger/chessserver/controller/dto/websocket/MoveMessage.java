@@ -12,6 +12,7 @@ public class MoveMessage extends Message {
     private int startRow;
     private int endCol;
     private int endRow;
+    private boolean isSecondCastleMove = false;
 
     public MoveMessage(String playerEmail, int startCol, int startRow, int endCol, int endRow){
         super(MessageType.MOVE);

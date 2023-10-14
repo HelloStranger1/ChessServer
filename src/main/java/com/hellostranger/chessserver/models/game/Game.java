@@ -14,6 +14,7 @@ public class Game {
 
     private String id;
 
+
     private Board board;
 
     @JsonIgnore
@@ -27,6 +28,7 @@ public class Game {
     private Boolean isP1turn;
 
     private GameState gameState;
+
 
     private List<Move> moveList;
 

@@ -1,12 +1,14 @@
 package com.hellostranger.chessserver.models.entities;
 
+import com.hellostranger.chessserver.models.enums.GameState;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 @Getter
 @Setter
@@ -26,15 +28,21 @@ public class GameRepresentation {
     @JoinColumn(name = "black_player_id")
     private User blackPlayer;
 
-    @OneToMany(mappedBy = "game", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
-    private Set<FENRepresentation> FENRepresentations;
+    @Enumerated(EnumType.STRING)
+    private GameState result;
 
-    public void addFENRepresentation(FENRepresentation fenRepresentation){
-        if(this.FENRepresentations == null){
-            this.FENRepresentations = new HashSet<>();
+    private LocalDate date = LocalDate.now();
+
+    @OneToMany(mappedBy = "game", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
+    private List<BoardRepresentation> BoardRepresentations;
+
+    public void addBoardRepresentation(BoardRepresentation boardRepresentation){
+        if(this.BoardRepresentations == null){
+            this.BoardRepresentations = new ArrayList<>();
         }
 
-        this.FENRepresentations.add(fenRepresentation);
+        this.BoardRepresentations.add(boardRepresentation);
+
     }
 
 

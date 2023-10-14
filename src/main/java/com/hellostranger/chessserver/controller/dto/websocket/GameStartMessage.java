@@ -1,5 +1,6 @@
 package com.hellostranger.chessserver.controller.dto.websocket;
 
+import com.hellostranger.chessserver.models.entities.User;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -10,17 +11,22 @@ public class GameStartMessage extends Message {
     private String blackPlayerName;
     private String whitePlayerEmail;
     private String blackPlayerEmail;
+    private String whitePlayerImage;
+    private String blackPlayerImage;
     private Integer whiteElo;
     private Integer blackElo;
 
-    public GameStartMessage(String whitePlayerName, String blackPlayerName, String whitePlayerEmail, String blackPlayerEmail, Integer whiteElo, Integer blackElo){
+    public GameStartMessage(User whitePlayer, User blackPlayer){
         super(MessageType.START);
-        this.whitePlayerName = whitePlayerName;
-        this.whitePlayerEmail = whitePlayerEmail;
-        this.blackPlayerName = blackPlayerName;
-        this.blackPlayerEmail = blackPlayerEmail;
-        this.blackElo = blackElo;
-        this.whiteElo = whiteElo;
+        this.whitePlayerName = whitePlayer.getName();
+        this.whitePlayerEmail = whitePlayer.getEmail();
+        this.blackPlayerName = blackPlayer.getName();
+        this.blackPlayerEmail = blackPlayer.getEmail();
+        this.whitePlayerImage = whitePlayer.getImage();
+        this.blackPlayerImage = blackPlayer.getImage();
+        this.blackElo = blackPlayer.getElo();
+        this.whiteElo = whitePlayer.getElo();
+
     }
 
     @Override

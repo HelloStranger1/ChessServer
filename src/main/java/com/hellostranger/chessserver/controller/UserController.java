@@ -1,7 +1,10 @@
 package com.hellostranger.chessserver.controller;
 
+import com.hellostranger.chessserver.controller.dto.GameHistoryResponse;
 import com.hellostranger.chessserver.controller.dto.UpdateRequest;
 import com.hellostranger.chessserver.models.entities.FriendRequest;
+import com.hellostranger.chessserver.models.entities.GameRepresentation;
+
 import com.hellostranger.chessserver.models.entities.User;
 import com.hellostranger.chessserver.service.FriendRequestService;
 import com.hellostranger.chessserver.service.UserService;
@@ -70,6 +73,23 @@ public class UserController {
             user.setName(name);
             userService.saveUser(user);
             return ResponseEntity.ok("User name updated Successfully");
+        } catch (NoSuchElementException e){
+            String errorMessage = "User with email " + userEmail + " not found.";
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorMessage);
+        }
+    }
+
+    @GetMapping("/games-history/{userEmail}")
+    public ResponseEntity<?> getGamesHistory(
+            @PathVariable("userEmail") String userEmail
+    ) {
+        try{
+            User user = userService.getUserByEmail(userEmail);
+            List<GameHistoryResponse> games = userService.getUsersGameHistory(user);
+            for(int i = 0; i < games.size(); i++){
+                log.info("GamesHistoryResponse FEN at " + i + " is: " + games.get(i).getBoardsHistoryFEN());
+            }
+            return ResponseEntity.ok(games);
         } catch (NoSuchElementException e){
             String errorMessage = "User with email " + userEmail + " not found.";
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorMessage);

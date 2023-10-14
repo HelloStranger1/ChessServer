@@ -1,16 +1,17 @@
 package com.hellostranger.chessserver.service;
 
+import com.google.gson.Gson;
 import com.hellostranger.chessserver.controller.dto.websocket.MoveMessage;
 import com.hellostranger.chessserver.exceptions.*;
-import com.hellostranger.chessserver.models.entities.FENRepresentation;
+import com.hellostranger.chessserver.models.entities.BoardRepresentation;
 import com.hellostranger.chessserver.models.entities.GameRepresentation;
 import com.hellostranger.chessserver.models.enums.Color;
 import com.hellostranger.chessserver.models.enums.GameState;
 import com.hellostranger.chessserver.models.enums.PieceType;
 import com.hellostranger.chessserver.models.game.*;
 import com.hellostranger.chessserver.models.entities.User;
-import com.hellostranger.chessserver.storage.FENRepresentationRepository;
-import com.hellostranger.chessserver.storage.GameRespresentationRepository;
+import com.hellostranger.chessserver.storage.BoardRepresentationRepository;
+import com.hellostranger.chessserver.storage.GameRepresentationRepository;
 import com.hellostranger.chessserver.storage.GameStorage;
 import com.hellostranger.chessserver.storage.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -32,10 +33,10 @@ public class GameService {
     private final UserRepository userRepository;
 
     @Autowired
-    private final GameRespresentationRepository gameRespresentationRepository;
+    private final GameRepresentationRepository gameRespresentationRepository;
 
     @Autowired
-    private final FENRepresentationRepository fenRepresentationRepository;
+    private final BoardRepresentationRepository boardRepresentationRepository;
 
     public Game createGame(){
         Game game = new Game();
@@ -108,16 +109,17 @@ public class GameService {
             GameRepresentation gameRepresentation = new GameRepresentation();
             gameRepresentation.setWhitePlayer(game.getWhitePlayer());
             gameRepresentation.setBlackPlayer(game.getBlackPlayer());
-
-            FENRepresentation FEN = FENRepresentation
+            Gson gson = new Gson();
+            log.info("board is " + game.getBoard());
+            BoardRepresentation boardRepresentation = BoardRepresentation
                     .builder()
-                    .FEN(convertGameToFEN(game))
+                    .boardJson(gson.toJson(game.getBoard()))
                     .game(gameRepresentation)
                     .build();
 
-            gameRepresentation.addFENRepresentation(FEN);
+            gameRepresentation.addBoardRepresentation(boardRepresentation);
             gameRespresentationRepository.save(gameRepresentation);
-            fenRepresentationRepository.save(FEN);
+            boardRepresentationRepository.save(boardRepresentation);
             game.setGameRepresentation(new GameRepresentation());
 
 
@@ -182,14 +184,15 @@ public class GameService {
         GameState state = checkGameState(game);
         game.setGameState(state);
         game.addMove(new Move(startCol, startRow, endCol, endRow));
-        FENRepresentation FEN = FENRepresentation
+        Gson gson = new Gson();
+        BoardRepresentation boardRepresentation = BoardRepresentation
                 .builder()
-                .FEN(convertGameToFEN(game))
+                .boardJson(gson.toJson(game.getBoard()))
                 .game(game.getGameRepresentation())
                 .build();
-        game.getGameRepresentation().addFENRepresentation(FEN);
+        game.getGameRepresentation().addBoardRepresentation(boardRepresentation);
         gameRespresentationRepository.save(game.getGameRepresentation());
-        fenRepresentationRepository.save(FEN);
+        boardRepresentationRepository.save(boardRepresentation);
 
         //TODO: Extract the code below to an "On Game End" function
         if(game.getGameState() == GameState.WHITE_WIN || game.getGameState() == GameState.BLACK_WIN || game.getGameState() == GameState.DRAW){
