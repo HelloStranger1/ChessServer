@@ -82,7 +82,8 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
                         moveMessage.getStartCol(),
                         moveMessage.getStartRow(),
                         moveMessage.getEndCol(),
-                        moveMessage.getEndRow());
+                        moveMessage.getEndRow(),
+                        moveMessage.getPromotionType());
             } catch (GameNotFoundException e){
                 log.info("Not found, error: " + e.getMsg());
                 return;

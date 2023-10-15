@@ -65,6 +65,10 @@ public class Board {
         return squaresArray[row][col];
     }
 
+    public void promotePawnAt(Square pawnSqaure, PieceType promotionType){
+        pawnSqaure.getPiece().setPieceType(promotionType);
+    }
+
     public boolean isCastlingMove(Square start, Square end){
         Piece startPiece = start.getPiece();
         Piece endPiece = end.getPiece();

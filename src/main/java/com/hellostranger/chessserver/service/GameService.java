@@ -128,7 +128,7 @@ public class GameService {
 
     }
 
-    public Game makeMove(String gameId, String playerEmail, int startCol, int startRow,int endCol, int endRow)
+    public Game makeMove(String gameId, String playerEmail, int startCol, int startRow,int endCol, int endRow, PieceType promotionType)
             throws InvalidMoveException, GameFinishedException, SquareNotFoundException, GameNotFoundException {
         Game game = getGameById(gameId);
         boolean isUserWhite = Objects.equals(playerEmail, game.getWhitePlayer().getEmail());
@@ -159,7 +159,12 @@ public class GameService {
             if(isCastle(game, startSquare, endSquare)){
                 isCastleMove = true;
                 game.getBoard().makeCastlingMove(startSquare, endSquare);
-            }else{
+            }else if(promotionType != null){
+                game.setHalfMoves(-1);
+                game.getBoard().movePiece(startSquare, endSquare);
+                game.getBoard().promotePawnAt(endSquare, promotionType);
+            }
+            else{
                 if( startSquare.getPiece().getPieceType() == PieceType.PAWN ||
                         (endSquare.getPiece() != null && startSquare.getPiece().getColor() != endSquare.getPiece().getColor())
                 ){
