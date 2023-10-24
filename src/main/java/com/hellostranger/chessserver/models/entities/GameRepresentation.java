@@ -36,7 +36,7 @@ public class GameRepresentation {
     @Column(columnDefinition = "TEXT")
     private String startBoardJson;
 
-    @OneToMany(/*mappedBy = "game", */fetch = FetchType.EAGER, cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(/*mappedBy = "game", */fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @JoinColumn(name = "game_representation_id")
     private List<MoveRepresentation> moveRepresentations;
 

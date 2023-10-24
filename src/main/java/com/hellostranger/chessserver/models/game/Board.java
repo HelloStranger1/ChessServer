@@ -1,19 +1,19 @@
 package com.hellostranger.chessserver.models.game;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.hellostranger.chessserver.exceptions.InvalidMoveException;
 import com.hellostranger.chessserver.exceptions.SquareNotFoundException;
 import com.hellostranger.chessserver.models.enums.Color;
 import com.hellostranger.chessserver.models.enums.PieceType;
-import jakarta.persistence.Transient;
-import lombok.Data;
+import com.hellostranger.chessserver.models.game.pieces.King;
+import com.hellostranger.chessserver.models.game.pieces.Piece;
+import com.hellostranger.chessserver.models.game.pieces.PieceFactory;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Objects;
 
 @Getter
 @Setter
@@ -23,13 +23,10 @@ public class Board {
 
     private Square[][] squaresArray;
 
-    @JsonIgnore
-    private Piece whiteKing;
+    private King whiteKing;
 
-    @JsonIgnore
-    private Piece blackKing;
+    private King blackKing;
 
-    @JsonIgnore
     private Square phantomPawnSquare; //for en passant.
 
     @Override
@@ -45,6 +42,7 @@ public class Board {
 
         setBoard();
     }
+
     private void initializeBoard() {
         // Initialize the squares and set the associated board for each square
         for (int row = 0; row < 8; row++) {
@@ -65,9 +63,10 @@ public class Board {
         return squaresArray[row][col];
     }
 
-    public void promotePawnAt(Square pawnSqaure, PieceType promotionType){
-        pawnSqaure.getPiece().setPieceType(promotionType);
+    public void promotePawnAt(Square pawnSquare, PieceType promotionType){
+        pawnSquare.getPiece().setPieceType(promotionType);
     }
+
 
     public boolean isCastlingMove(Square start, Square end){
         Piece startPiece = start.getPiece();
@@ -87,20 +86,21 @@ public class Board {
         log.info("move from square: "+ start + "to " + end + "is a castling move");
         return true;
     }
-    public boolean isValidMove(Square start, Square end) throws InvalidMoveException {
-        //assumes there is a piece at square start
+
+    public boolean isValidMove(Square start, Square end){
         Piece movingPiece = start.getPiece();
-
-        if(!movingPiece.canMakeMove(start,end)){
-            throw new InvalidMoveException("Piece can't make this move");
+        if(movingPiece == null){
+            log.info("Move is invalid because startingPiece is null");
+            return false;
         }
+        if(!canPieceMoveTo(movingPiece, end)){
+            log.info("Move is invalid because piece can't move to");
+            return false;
+        }
+
         boolean isCastlingMove = isCastlingMove(start, end);
-        if(isPieceBlocked(movingPiece, start, end, isCastlingMove)){
-            throw new InvalidMoveException("Piece can't make this move, its blocked");
-        }
-
-        Piece capturedPiece = end.getPiece();
         boolean isFirstMove = !movingPiece.getHasMoved();
+        Piece capturedPiece = end.getPiece();
         if(isCastlingMove){
             makeCastlingMove(start, end);
         }else{
@@ -113,18 +113,44 @@ public class Board {
         } catch (SquareNotFoundException e){
             log.info("isValidMove error: " + e.getMsg());
         }
+
         if(isCastlingMove){
             undoCastlingMove(start, end);
-        }else{
+        }
+        else {
             movePieceTemp(end, start);
             end.setPiece(capturedPiece);
-            if(isFirstMove){
-                movingPiece.setHasMoved(false);
-            }
         }
+        if(isFirstMove){
+            movingPiece.setHasMoved(false);
+        }
+
 
         return isLegalMove;
     }
+
+    private boolean canPieceMoveTo(Piece piece, Square square) {
+        boolean result = false;
+        for (Square movebleSquare : piece.getMovableSquares(this)) {
+            if (movebleSquare.equals(square)) {
+                result = true;
+                break;
+            }
+        }
+        return result;
+    }
+    private boolean canPieceThreatenSquare(Piece piece, Square square) {
+        boolean result = false;
+        for (Square movebleSquare : piece.getThreatenedSquares(this)) {
+            if (movebleSquare.equals(square)) {
+                result = true;
+                break;
+            }
+        }
+        return result;
+    }
+
+
 
     public boolean canPlayerPlay(Color playerColor){
         log.info("checking if player: "+ playerColor + "can play");
@@ -132,7 +158,10 @@ public class Board {
             for(int col = 0; col < 8; col++){
                 Square currentSquare = squaresArray[row][col];
                 if(currentSquare.getPiece() != null && currentSquare.getPiece().getColor() == playerColor){
-                    switch (currentSquare.getPiece().getPieceType()){
+                    if(doesPieceHaveAMove(currentSquare.getPiece(), currentSquare)){
+                        return true;
+                    }
+                    /*switch (currentSquare.getPiece().getPieceType()){
                         case PAWN -> {
                             if(playerColor == Color.BLACK){
                                 if(doesBlackPawnHaveAMove(currentSquare)){ return true; }
@@ -155,13 +184,22 @@ public class Board {
                         case KING -> {
                             if(doesKingHaveAMove(currentSquare)){ return true; }
                         }
-                    }
+                    }*/
                 }
             }
         }
         return false;
     }
-    private boolean doesBlackPawnHaveAMove(Square currentSquare) {
+    private boolean doesPieceHaveAMove(Piece piece, Square startSquare){
+        for(Square targetSquare : piece.getMovableSquares(this)){
+            if(isValidMove(startSquare, targetSquare)){
+                log.info("The piece on square: " + startSquare + "  can move to the square: " + targetSquare);
+                return true;
+            }
+        }
+        return false;
+    }
+    /*private boolean doesBlackPawnHaveAMove(Square currentSquare) {
         int row = currentSquare.getRowIndex();
         int col = currentSquare.getColIndex();
         if(row - 2 >= 0){
@@ -194,9 +232,9 @@ public class Board {
             }catch (InvalidMoveException ignored) {}
         }
         return false;
-    }
+    }*/
 
-    private boolean doesWhitePawnHaveAMove(Square currentSquare){
+    /*private boolean doesWhitePawnHaveAMove(Square currentSquare){
         int row = currentSquare.getRowIndex();
         int col = currentSquare.getColIndex();
         if(row + 2 < 8){
@@ -230,8 +268,8 @@ public class Board {
 
         }
         return false;
-    }
-    private boolean doesKnightHaveAMove(Square currentSquare) {
+    }*/
+    /*private boolean doesKnightHaveAMove(Square currentSquare) {
         int row = currentSquare.getRowIndex();
         int col = currentSquare.getColIndex();
         if(row + 1 < 8){
@@ -297,8 +335,8 @@ public class Board {
         }
 
         return false;
-    }
-    private boolean doesBishopHaveAMove(Square currentSquare) {
+    }*/
+    /*private boolean doesBishopHaveAMove(Square currentSquare) {
         int row = currentSquare.getRowIndex();
         int col = currentSquare.getColIndex();
         for(int diff = 1; diff < 8; diff++){
@@ -336,9 +374,9 @@ public class Board {
             }
         }
         return false;
-    }
+    }*/
 
-    private boolean doesRookHaveAMove(Square currentSquare){
+    /*private boolean doesRookHaveAMove(Square currentSquare){
         int row = currentSquare.getRowIndex();
         int col = currentSquare.getColIndex();
         for(int curRow = 0; curRow < 8; curRow++){
@@ -388,12 +426,12 @@ public class Board {
                             log.info("King can move from " + currentSquare + "to " + squaresArray[row + i][col + j]);
                             return true;
                         }
-                    } catch (InvalidMoveException e){log.info("king can't move to: " + squaresArray[row + i][col + j] + "eror is: " + e.getMsg());}
+                    } catch (InvalidMoveException e){log.info("king can't move to: " + squaresArray[row + i][col + j] + "error is: " + e.getMsg());}
                 }
             }
         }
         return false;
-    }
+    }*/
 
     public boolean isKingInCheck(boolean isWhite) throws SquareNotFoundException {
         Square kingSquare;
@@ -408,10 +446,14 @@ public class Board {
                 Square currentSquare = squaresArray[row][col];
                 Piece piece = currentSquare.getPiece();
                 if(piece != null && isWhite != (piece.getColor() == Color.WHITE)){
-                    if(piece.canMakeMove(currentSquare, kingSquare) && !isPieceBlocked(piece, currentSquare, kingSquare, false)){
+                    if(canPieceThreatenSquare(piece, kingSquare)){
                         log.info("\n \n isKingInCheck king is in check. by piece: \n" + piece + "\n \n");
                         return true;
                     }
+                    /*if(piece.canMakeMove(currentSquare, kingSquare) && !isPieceBlocked(piece, currentSquare, kingSquare, false)){
+                        log.info("\n \n isKingInCheck king is in check. by piece: \n" + piece + "\n \n");
+                        return true;
+                    }*/
                 }
             }
         }
@@ -442,8 +484,7 @@ public class Board {
         movingPiece.setHasMoved(true);
         start.setPiece(null);
         end.setPiece(movingPiece);
-        movingPiece.setColIndex(end.getColIndex());
-        movingPiece.setRowIndex(end.getRowIndex());
+        movingPiece.move(end);
     }
 
 
@@ -476,7 +517,7 @@ public class Board {
     }
 
 
-    public boolean isPieceBlocked(Piece movingPiece, Square start, Square end, boolean isCastlingMove){
+    /*public boolean isPieceBlocked(Piece movingPiece, Square start, Square end, boolean isCastlingMove){
         switch(movingPiece.getPieceType()){
             case KING -> {
                 if(isCastlingMove){
@@ -548,9 +589,9 @@ public class Board {
 
         //Every case was covered. this will never be reached.
         return false;
-    }
+    }*/
 
-    public boolean isClearVertically(Square start, Square end){
+    /*public boolean isClearVertically(Square start, Square end){
         if(start.getRowIndex() > end.getRowIndex()){ //piece is moving down the board
             //checking for blocking pieces
             for(int curRow = start.getRowIndex() - 1; curRow > end.getRowIndex(); curRow--){
@@ -632,66 +673,131 @@ public class Board {
             }
         }
         return true;
-    }
+    }*/
     public void setPieceAt(int col, int row, Piece piece){
         Square square = squaresArray[row][col];
         square.setPiece(piece);
 
     }
     private void setBoard(){
+        PieceFactory pieceFactory = new PieceFactory();
         Piece currentPiece;
         for (int col = 0; col < 8; col++){
-            currentPiece = new Piece(Color.WHITE, PieceType.PAWN, false, squaresArray[1][col]);
+            currentPiece = pieceFactory.getPiece(PieceType.PAWN, Color.WHITE, squaresArray[1][col]);
             setPieceAt(col, 1, currentPiece);
 
-            currentPiece = new Piece(Color.BLACK, PieceType.PAWN, false, squaresArray[6][col]);
+            currentPiece = pieceFactory.getPiece(PieceType.PAWN, Color.BLACK, squaresArray[6][col]);
             setPieceAt(col, 6, currentPiece);
         }
 
-        currentPiece = new Piece(Color.WHITE, PieceType.ROOK, false, squaresArray[0][0]);
+        currentPiece = pieceFactory.getPiece(PieceType.ROOK,Color.WHITE, squaresArray[0][0]);
         setPieceAt(0, 0, currentPiece);
-        currentPiece = new Piece(Color.WHITE, PieceType.ROOK, false, squaresArray[0][7]);
+        currentPiece = pieceFactory.getPiece(PieceType.ROOK,Color.WHITE,  squaresArray[0][7]);
         setPieceAt(7, 0, currentPiece);
 
-        currentPiece = new Piece(Color.BLACK, PieceType.ROOK, false, squaresArray[7][0]);
+        currentPiece = pieceFactory.getPiece(PieceType.ROOK, Color.BLACK,  squaresArray[7][0]);
         setPieceAt(0, 7, currentPiece);
-        currentPiece = new Piece(Color.BLACK, PieceType.ROOK, false, squaresArray[7][7]);
+        currentPiece = pieceFactory.getPiece( PieceType.ROOK, Color.BLACK, squaresArray[7][7]);
         setPieceAt(7, 7, currentPiece);
 
-        currentPiece = new Piece(Color.WHITE, PieceType.KNIGHT, false, squaresArray[0][1]);
+        currentPiece = pieceFactory.getPiece( PieceType.KNIGHT, Color.WHITE, squaresArray[0][1]);
         setPieceAt(1, 0, currentPiece);
-        currentPiece = new Piece(Color.WHITE, PieceType.KNIGHT, false, squaresArray[0][6]);
+        currentPiece = pieceFactory.getPiece( PieceType.KNIGHT, Color.WHITE, squaresArray[0][6]);
         setPieceAt(6, 0, currentPiece);
 
-        currentPiece = new Piece(Color.BLACK, PieceType.KNIGHT, false, squaresArray[7][1]);
+        currentPiece = pieceFactory.getPiece( PieceType.KNIGHT, Color.BLACK, squaresArray[7][1]);
         setPieceAt(1, 7, currentPiece);
-        currentPiece = new Piece(Color.BLACK, PieceType.KNIGHT, false, squaresArray[7][6]);
+        currentPiece = pieceFactory.getPiece( PieceType.KNIGHT, Color.BLACK, squaresArray[7][6]);
         setPieceAt(6, 7, currentPiece);
 
-        currentPiece = new Piece(Color.WHITE, PieceType.BISHOP, false, squaresArray[0][2]);
+        currentPiece = pieceFactory.getPiece( PieceType.BISHOP, Color.WHITE, squaresArray[0][2]);
         setPieceAt(2, 0, currentPiece);
-        currentPiece = new Piece(Color.WHITE, PieceType.BISHOP, false, squaresArray[0][5]);
+        currentPiece = pieceFactory.getPiece( PieceType.BISHOP, Color.WHITE, squaresArray[0][5]);
         setPieceAt(5, 0, currentPiece);
 
-        currentPiece = new Piece(Color.BLACK, PieceType.BISHOP, false, squaresArray[7][2]);
+        currentPiece = pieceFactory.getPiece( PieceType.BISHOP, Color.BLACK, squaresArray[7][2]);
         setPieceAt(2, 7, currentPiece);
-        currentPiece = new Piece(Color.BLACK, PieceType.BISHOP, false, squaresArray[7][5]);
+        currentPiece = pieceFactory.getPiece( PieceType.BISHOP, Color.BLACK, squaresArray[7][5]);
         setPieceAt(5, 7, currentPiece);
 
 
-        currentPiece = new Piece(Color.WHITE, PieceType.KING, false, squaresArray[0][4]);
+        currentPiece = pieceFactory.getPiece( PieceType.KING, Color.WHITE, squaresArray[0][4]);
         setPieceAt(4, 0, currentPiece);
-        whiteKing = currentPiece;
+        whiteKing = (King) currentPiece;
 
-        currentPiece = new Piece(Color.WHITE, PieceType.QUEEN, false, squaresArray[0][3]);
+        currentPiece = pieceFactory.getPiece( PieceType.QUEEN, Color.WHITE, squaresArray[0][3]);
         setPieceAt(3, 0, currentPiece);
 
-        currentPiece = new Piece(Color.BLACK, PieceType.KING, false, squaresArray[7][4]);
+        currentPiece = pieceFactory.getPiece( PieceType.KING, Color.BLACK, squaresArray[7][4]);
         setPieceAt(4, 7, currentPiece);
-        blackKing = currentPiece;
+        blackKing = (King) currentPiece;
 
-        currentPiece = new Piece(Color.BLACK, PieceType.QUEEN, false, squaresArray[7][3]);
+        currentPiece = pieceFactory.getPiece( PieceType.QUEEN, Color.BLACK, squaresArray[7][3]);
         setPieceAt(3, 7, currentPiece);
+    }
+
+    public Square[] beamSearchThreat(int startRow, int startCol, Color color, int incrementCol, int incrementRow){
+        ArrayList<Square> threatenedSquares = new ArrayList<>();
+        int curRow = startRow + incrementRow;
+        int curCol = startCol + incrementCol;
+        while(curCol >= 0 && curRow >= 0 && curCol <= 7 && curRow <=7){
+            Square curSquare = squaresArray[curRow][curCol];
+            Piece curPiece = curSquare.getPiece();
+            if(curPiece != null){
+                if(curPiece.getColor() != color){
+                    threatenedSquares.add(curSquare);
+                }
+                break;
+            }
+            threatenedSquares.add(curSquare);
+            curCol += incrementCol;
+            curRow += incrementRow;
+        }
+        Square[] sqrArr = new Square[threatenedSquares.size()];
+        return threatenedSquares.toArray(sqrArr);
+    }
+    public Square pawnSpotSearchThreat(int startRow, int startCol, Color color, int incrementCol, int incrementRow, Boolean isAttacking){
+        int curRow = startRow + incrementRow;
+        int curCol = startCol + incrementCol;
+        if(curRow >= 8 || curCol >= 8 || curRow < 0 || curCol < 0){
+            return null;
+        }
+        Square curSquare = squaresArray[curRow][curCol];
+        Piece curPiece = curSquare.getPiece();
+        if(isAttacking && curPiece == null && phantomPawnSquare == curSquare){
+            return curSquare;
+        }
+        if(curPiece != null){
+            if(!isAttacking){
+                return null;
+            }
+            if(curPiece.getColor() != color){
+                return curSquare;
+            }else{
+                return null;
+            }
+        }
+        if(!isAttacking){
+            return curSquare;
+        }
+        return null;
+    }
+    public Square spotSearchThreat(int startRow, int startCol, Color color, int incrementCol, int incrementRow) {
+        int curRow = startRow + incrementRow;
+        int curCol = startCol + incrementCol;
+        if(curRow >= 8 || curCol >= 8 || curRow < 0 || curCol < 0){
+            return null;
+        }
+        Square curSquare = squaresArray[curRow][curCol];
+        Piece curPiece = curSquare.getPiece();
+        if(curPiece != null){
+            if(curPiece.getColor() != color){
+                return curSquare;
+            }else{
+                return null;
+            }
+        }
+        return curSquare;
     }
 
 
@@ -756,5 +862,6 @@ public class Board {
         }
         return desc.toString();
     }*/
+
 
 }

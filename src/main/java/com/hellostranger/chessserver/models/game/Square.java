@@ -1,6 +1,7 @@
 package com.hellostranger.chessserver.models.game;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.hellostranger.chessserver.models.game.pieces.Piece;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -25,7 +26,7 @@ public class Square {
         this.rowIndex = rowIndex;
     }
 
-    Square(Square otherSquare){
+    /*Square(Square otherSquare){
         this.board = otherSquare.getBoard();
         if(otherSquare.getPiece() != null){
             this.piece = new Piece(otherSquare.getPiece());
@@ -34,7 +35,7 @@ public class Square {
         }
         this.colIndex = otherSquare.getColIndex();
         this.rowIndex = otherSquare.getRowIndex();
-    }
+    }*/
 
     @Override
     public String toString() {

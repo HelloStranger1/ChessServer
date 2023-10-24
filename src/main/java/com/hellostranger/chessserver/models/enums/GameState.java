@@ -6,5 +6,6 @@ public enum GameState {
     ACTIVE,
     DRAW,
     WHITE_WIN,
-    BLACK_WIN
+    BLACK_WIN,
+    ABORTED
 }

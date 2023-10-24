@@ -5,6 +5,7 @@ import com.google.gson.Gson;
 import com.hellostranger.chessserver.controller.dto.websocket.*;
 import com.hellostranger.chessserver.exceptions.*;
 import com.hellostranger.chessserver.models.enums.GameState;
+import com.hellostranger.chessserver.models.game.Board;
 import com.hellostranger.chessserver.models.game.Game;
 import com.hellostranger.chessserver.models.entities.User;
 import com.hellostranger.chessserver.service.GameService;
@@ -55,91 +56,101 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException, GameNotFoundException {
         String gameId = extractGameId(Objects.requireNonNull(session.getUri()).getPath());
-
         String messageJson = message.getPayload();
-        log.info("handleTextMessage: "+ messageJson);
+
+        log.info("handleTextMessage. Message is: "+ messageJson);
+
         Game currentGame = gameService.getGameById(gameId);
+
         Gson gson = new Gson();
         Message webSocketMessage = gson.fromJson(messageJson, Message.class);
-        log.info("Websocket message : " + webSocketMessage);
-        if(webSocketMessage.getMessageType() == MessageType.MOVE){
-            MoveMessage moveMessage = gson.fromJson(messageJson, MoveMessage.class);
-            log.info("handle move, " + gameId + "moveMsg: " + moveMessage + "Session: " + session);
 
-            if (currentGame.getGameState() != GameState.ACTIVE) {
-                return;
-            }
-            Game updatedGame;
-            boolean isCastleMove = false;
-            try{
-                isCastleMove = isCastle(currentGame, moveMessage);
-            } catch (SquareNotFoundException e) {
-                log.info("idk checking if castle websocket. e: " + e.getMsg());
-            }
-
-            try{
-                updatedGame = gameService.makeMove(gameId, moveMessage.getPlayerEmail(),
-                        moveMessage.getStartCol(),
-                        moveMessage.getStartRow(),
-                        moveMessage.getEndCol(),
-                        moveMessage.getEndRow(),
-                        moveMessage.getPromotionType());
-            } catch (GameNotFoundException e){
-                log.info("Not found, error: " + e.getMsg());
-                return;
-            } catch (GameFinishedException e){
-                log.info("Game finished, error: " + e.getMsg());
-                return;
-            } catch (SquareNotFoundException e){
-                log.info("Square Not Found, error: " + e.getMsg());
-                return;
-            } catch (InvalidMoveException e){
-                log.info("Invalid Move, error: " + e.getMsg());
-                InvalidMoveMessage msg = new InvalidMoveMessage();
-                session.sendMessage(new TextMessage(gson.toJson(msg, InvalidMoveMessage.class)));
-                log.info("send: " + new TextMessage(gson.toJson(msg, InvalidMoveMessage.class)) + "to " + session);
-                return;
-            }
-            if(updatedGame != null){
-                log.info("Updated game isn't null. state is: " + updatedGame.getGameState());
-                if (isCastleMove){
-                    MoveMessage[] castleMoves = gameService.convertCastleToMoves(moveMessage);
-                    sendMessageToAllPlayers(gameId, castleMoves[0]);
-                    sendMessageToAllPlayers(gameId, castleMoves[1]);
-                }else{
-                    sendMessageToAllPlayers(gameId, moveMessage);
-                }
-                if (updatedGame.getGameState() == GameState.WHITE_WIN ||
-                        updatedGame.getGameState() == GameState.BLACK_WIN ||
-                        updatedGame.getGameState() == GameState.DRAW) {
-                    //either a win for one of the players or a draw
-                    GameEndMessage endMessage = new GameEndMessage(updatedGame.getGameState(), "Someone won");
-                    log.info("game move list is: "+ updatedGame.getMoveList());
-                    sendMessageToAllPlayers(gameId, endMessage);
-                }
-            }else{
-                log.info("\n \n Updated game is null ?!?!?!?!?! \n \n");
-            }
-
-        } else if(webSocketMessage.getMessageType() == MessageType.START){
+        if(webSocketMessage.getMessageType() == MessageType.START){
             GameStartMessage startMessage = gson.fromJson(messageJson, GameStartMessage.class);
             sendMessageToAllPlayers(gameId, startMessage);
-        } else if(webSocketMessage.getMessageType() == MessageType.END){
+            return;
+        }
+        if(webSocketMessage.getMessageType() == MessageType.END){
             GameEndMessage endMessage = gson.fromJson(messageJson, GameEndMessage.class);
             sendMessageToAllPlayers(gameId, endMessage);
-        } else if (webSocketMessage.getMessageType() == MessageType.CONCEDE) {
-            ConcedeGameMessage concedeGameMessage = gson.fromJson(messageJson, ConcedeGameMessage.class);
-            if (concedeGameMessage.getPlayerEmail() == currentGame.getWhitePlayer().getEmail()){
-                log.info("White resigned. message email: " + concedeGameMessage.getPlayerEmail() + "and black email: "+ currentGame.getBlackPlayer().getEmail() + "and white's:" + currentGame.getWhitePlayer().getEmail());
-                gameService.onGameEnding(currentGame.getWhitePlayer(), currentGame.getBlackPlayer(), GameState.BLACK_WIN, currentGame);
-                GameEndMessage endMessage = new GameEndMessage(GameState.BLACK_WIN, "Black won by resignation");
+            return;
+        }
+        if(webSocketMessage.getMessageType() == MessageType.CONCEDE){
+            if(currentGame.getMoveList() == null || currentGame.getMoveList().size() < 2){
+                log.info("Game was aborted.");
+                GameEndMessage endMessage = new GameEndMessage(GameState.ABORTED, "Game was aborted.");
                 sendMessageToAllPlayers(gameId, endMessage);
-            } else{
+                gameService.abortGame(currentGame.getWhitePlayer(), currentGame.getBlackPlayer(), currentGame);
+                return;
+            }
+            ConcedeGameMessage concedeGameMessage = gson.fromJson(messageJson, ConcedeGameMessage.class);
+            String causeMessage;
+            GameState gameResult;
+            if(Objects.equals(concedeGameMessage.getPlayerEmail(), currentGame.getWhitePlayer().getEmail())){
+                log.info("White resigned. message email: " + concedeGameMessage.getPlayerEmail() + "and black email: "+ currentGame.getBlackPlayer().getEmail() + "and white's:" + currentGame.getWhitePlayer().getEmail());
+                causeMessage = "Black won by resignation";
+                gameResult = GameState.BLACK_WIN;
+            }else{
                 log.info("Black resigned. message email: " + concedeGameMessage.getPlayerEmail() + "and black email: "+ currentGame.getBlackPlayer().getEmail() + "and white's:" + currentGame.getWhitePlayer().getEmail());
-                gameService.onGameEnding(currentGame.getWhitePlayer(), currentGame.getBlackPlayer(), GameState.WHITE_WIN, currentGame);
-                GameEndMessage endMessage = new GameEndMessage(GameState.WHITE_WIN, "White won by resignation");
+                causeMessage = "White won by resignation";
+                gameResult = GameState.WHITE_WIN;
+            }
+            gameService.onGameEnding(currentGame.getWhitePlayer(), currentGame.getBlackPlayer(), gameResult, currentGame);
+            GameEndMessage endMessage = new GameEndMessage(gameResult, causeMessage);
+            sendMessageToAllPlayers(gameId, endMessage);
+            return;
+        }
+        //Message is a Move
+        MoveMessage moveMessage = gson.fromJson(messageJson, MoveMessage.class);
+
+        if (currentGame.getGameState() != GameState.ACTIVE) {
+            return;
+        }
+        Game updatedGame;
+        boolean isCastleMove = false;
+        try{
+            isCastleMove = isCastle(currentGame, moveMessage);
+        } catch (SquareNotFoundException e) {
+            log.error("In HandleMessage, isCastle threw SquareNotFoundException e: " + e.getMsg());
+        }
+
+        try{
+            updatedGame = gameService.makeMove(gameId, moveMessage);
+        } catch (GameNotFoundException e){
+            log.error("Game Not found, error: " + e.getMsg());
+            return;
+        } catch (GameFinishedException e){
+            log.error("Game finished, error: " + e.getMsg());
+            return;
+        } catch (SquareNotFoundException e){
+            log.error("Square Not Found, error: " + e.getMsg());
+            return;
+        } catch (InvalidMoveException e){
+            log.error("Invalid Move, error: " + e.getMsg());
+            InvalidMoveMessage msg = new InvalidMoveMessage();
+            session.sendMessage(new TextMessage(gson.toJson(msg, InvalidMoveMessage.class)));
+            log.info("send: " + new TextMessage(gson.toJson(msg, InvalidMoveMessage.class)) + "to " + session);
+            return;
+        }
+        if(updatedGame != null){
+            log.info("Updated game isn't null. state is: " + updatedGame.getGameState());
+            if (isCastleMove){
+                MoveMessage[] castleMoves = gameService.convertCastleToMoves(moveMessage);
+                sendMessageToAllPlayers(gameId, castleMoves[0]);
+                sendMessageToAllPlayers(gameId, castleMoves[1]);
+            }else{
+                sendMessageToAllPlayers(gameId, moveMessage);
+            }
+            if (updatedGame.getGameState() == GameState.WHITE_WIN ||
+                    updatedGame.getGameState() == GameState.BLACK_WIN ||
+                    updatedGame.getGameState() == GameState.DRAW) {
+                //either a win for one of the players or a draw
+                GameEndMessage endMessage = new GameEndMessage(updatedGame.getGameState(), "Someone won");
+                log.info("game move list is: "+ updatedGame.getMoveList());
                 sendMessageToAllPlayers(gameId, endMessage);
             }
+        }else{
+            log.info("\n \n Updated game is null ?!?!?!?!?! \n \n");
         }
 
     }
@@ -155,6 +166,8 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+
+
     private String extractGameId(String path) {
         // Extract the gameId from the WebSocket URL path
         String[] parts = path.split("/");
@@ -165,9 +178,11 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
     }
 
     private boolean isCastle(Game game, MoveMessage moveMessage) throws SquareNotFoundException {
-        return gameService.isCastle(game,
-                game.getBoard().getSquareAt(moveMessage.getStartCol(), moveMessage.getStartRow()),
-                game.getBoard().getSquareAt(moveMessage.getEndCol(), moveMessage.getEndRow()));
+        Board board = game.getBoard();
+        return board.isCastlingMove(
+                board.getSquareAt(moveMessage.getStartCol(), moveMessage.getStartRow()),
+                board.getSquareAt(moveMessage.getEndCol(), moveMessage.getEndRow()));
+
     }
 
     private void sendMessageToAllPlayers(String gameId, Message message) throws IOException {

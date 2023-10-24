@@ -7,9 +7,11 @@ import com.hellostranger.chessserver.models.entities.MoveRepresentation;
 import com.hellostranger.chessserver.models.entities.GameRepresentation;
 import com.hellostranger.chessserver.models.enums.Color;
 import com.hellostranger.chessserver.models.enums.GameState;
+import com.hellostranger.chessserver.models.enums.MoveType;
 import com.hellostranger.chessserver.models.enums.PieceType;
 import com.hellostranger.chessserver.models.game.*;
 import com.hellostranger.chessserver.models.entities.User;
+import com.hellostranger.chessserver.models.game.pieces.Piece;
 import com.hellostranger.chessserver.storage.MoveRepresentationRepository;
 import com.hellostranger.chessserver.storage.GameRepresentationRepository;
 import com.hellostranger.chessserver.storage.GameStorage;
@@ -128,15 +130,20 @@ public class GameService {
 
     }
 
-    public Game makeMove(String gameId, String playerEmail, int startCol, int startRow,int endCol, int endRow, PieceType promotionType)
+    public Game makeMove(String gameId,MoveMessage moveMessage)
             throws InvalidMoveException, GameFinishedException, SquareNotFoundException, GameNotFoundException {
+
         Game game = getGameById(gameId);
+        Board board = game.getBoard();
+        String playerEmail = moveMessage.getPlayerEmail();
+        int startCol = moveMessage.getStartCol(), startRow = moveMessage.getStartRow();
+        int endCol = moveMessage.getEndCol(), endRow = moveMessage.getEndRow();
+
         boolean isUserWhite = Objects.equals(playerEmail, game.getWhitePlayer().getEmail());
-        log.info("isPlaying white: " + isUserWhite);
+
         if (game.getGameState() != GameState.ACTIVE) {
             throw new GameFinishedException("The game has already finished.");
         }
-
 
         User user = getPlayer(game, playerEmail);
         if (user == null) {
@@ -145,34 +152,40 @@ public class GameService {
         if(!checkIfIsPlayersTurn(game, user)){
             throw new InvalidMoveException("not your turn");
         }
-        Square startSquare = game.getBoard().getSquareAt(startCol, startRow);
+
+        Square startSquare = board.getSquareAt(startCol, startRow);
+        Square endSquare = board.getSquareAt(endCol, endRow);
+
         if(startSquare.getPiece() == null ){
             throw new InvalidMoveException("No piece at that square");
         }else if( (startSquare.getPiece().getColor() == Color.WHITE) != isUserWhite){
             throw new InvalidMoveException("Piece at that square is not yours. the piece is: " + startSquare.getPiece() + "and your color is: " + isUserWhite);
         }
 
-        Square endSquare = game.getBoard().getSquareAt(endCol, endRow);
-        boolean isCastleMove = false;
-        if (game.getBoard().isValidMove(startSquare, endSquare)) {
+        if (board.isValidMove(startSquare, endSquare)) {
             log.info("GameService, move is legal");
-            if(isCastle(game, startSquare, endSquare)){
-                isCastleMove = true;
-                game.getBoard().makeCastlingMove(startSquare, endSquare);
-            }else if(promotionType != null){
+            if(moveMessage.getMoveType() == MoveType.CASTLE){
+                board.makeCastlingMove(startSquare, endSquare);
+            }else if(moveMessage.getMoveType() != MoveType.REGULAR){
                 game.setHalfMoves(-1);
-                game.getBoard().movePiece(startSquare, endSquare);
-                game.getBoard().promotePawnAt(endSquare, promotionType);
+                board.movePiece(startSquare, endSquare);
+                PieceType promotionType = switch (moveMessage.getMoveType()){
+                    case REGULAR, CASTLE -> null;
+                    case PROMOTION_QUEEN -> PieceType.QUEEN;
+                    case PROMOTION_ROOK -> PieceType.ROOK;
+                    case PROMOTION_KNIGHT -> PieceType.KNIGHT;
+                    case PROMOTION_BISHOP -> PieceType.BISHOP;
+                };
+                board.promotePawnAt(endSquare, promotionType);
             }
             else{
-                if( startSquare.getPiece().getPieceType() == PieceType.PAWN ||
+                if(startSquare.getPiece().getPieceType() == PieceType.PAWN ||
                         (endSquare.getPiece() != null && startSquare.getPiece().getColor() != endSquare.getPiece().getColor())
                 ){
                     game.setHalfMoves(-1);
                 }
-                game.getBoard().movePiece(startSquare, endSquare);
+                board.movePiece(startSquare, endSquare);
             }
-
         }else{
             throw new InvalidMoveException("Move is not legal");
         }
@@ -185,10 +198,19 @@ public class GameService {
         GameState state = checkGameState(game);
         game.setGameState(state);
 
-        game.addMove(new Move(startCol, startRow, endCol, endRow));
-
-        if(isCastleMove){
-            MoveMessage[] castleMoves = convertCastleToMoves(new MoveMessage(playerEmail, startCol, startRow, endCol, endRow));
+        game.addMove(new Move(moveMessage));
+        MoveRepresentation moveRepresentation = MoveRepresentation
+                .builder()
+                .startCol(startCol)
+                .endCol(endCol)
+                .startRow(startRow)
+                .endRow(endRow)
+                .moveType(moveMessage.getMoveType())
+                .build();
+        game.getGameRepresentation().addMoveRepresentation(moveRepresentation);
+        moveRepresentationRepository.save(moveRepresentation);
+        /*if(isCastleMove){
+            *//*MoveMessage[] castleMoves = convertCastleToMoves(new MoveMessage(playerEmail, startCol, startRow, endCol, endRow));
             MoveRepresentation move1 = MoveRepresentation
                     .builder()
                     .startCol(castleMoves[0].getStartCol())
@@ -205,24 +227,14 @@ public class GameService {
                     .build();
             game.getGameRepresentation().addMoveRepresentation(move1);
             game.getGameRepresentation().addMoveRepresentation(move2);
-            /*gameRespresentationRepository.save(game.getGameRepresentation());*/
+
             moveRepresentationRepository.save(move1);
-            moveRepresentationRepository.save(move2);
+            moveRepresentationRepository.save(move2);*//*
+
         }else{
-            MoveRepresentation moveRepresentation = MoveRepresentation
-                    .builder()
-                    .startCol(startCol)
-                    .endCol(endCol)
-                    .startRow(startRow)
-                    .endRow(endRow)
-                    .build();
 
-            game.getGameRepresentation().addMoveRepresentation(moveRepresentation);
-            /*gameRespresentationRepository.save(game.getGameRepresentation());*/
-            moveRepresentationRepository.save(moveRepresentation);
 
-        }
-
+        }*/
         if(game.getGameState() == GameState.WHITE_WIN || game.getGameState() == GameState.BLACK_WIN || game.getGameState() == GameState.DRAW){
             onGameEnding(game.getWhitePlayer(), game.getBlackPlayer(), game.getGameState(), game);
         }
@@ -256,28 +268,36 @@ public class GameService {
 
         userRepository.save(whitePlayer);
         userRepository.save(blackPlayer);
-        /*gameRespresentationRepository.save(game.getGameRepresentation());*/
-    }
-    public boolean isCastle(Game game, Square startSquare, Square endSquare){
-        return game.getBoard().isCastlingMove(startSquare, endSquare);
+
     }
 
+    public void abortGame(User whitePlayer, User blackPlayer, Game game){
+        GameRepresentation gameRepresentation = game.getGameRepresentation();
+        if(gameRepresentation.getMoveRepresentations() != null){
+            gameRepresentation.getMoveRepresentations().clear();
+        }
+
+        gameRespresentationRepository.delete(gameRepresentation);
+        userRepository.save(whitePlayer);
+        userRepository.save(blackPlayer);
+    }
     private GameState checkGameState(Game game){
         if(game.getHalfMoves() >= 100){
             return GameState.DRAW;
         }
+        Board board = game.getBoard();
         if(game.getIsP1turn()){
             //black just played his move. check if white king is in check:
             try{
-                if(game.getBoard().isKingInCheck(true)){
-                    if(!game.getBoard().canPlayerPlay(Color.WHITE)){
+                if(board.isKingInCheck(true)){
+                    if(!board.canPlayerPlay(Color.WHITE)){
                         //black has been checkmated
                         return GameState.BLACK_WIN;
                     }else{
                         return GameState.ACTIVE;
                     }
                 }else{
-                    if(!game.getBoard().canPlayerPlay(Color.WHITE)){
+                    if(!board.canPlayerPlay(Color.WHITE)){
                         return GameState.DRAW;
                     }else{
                         return GameState.ACTIVE;
@@ -290,15 +310,15 @@ public class GameService {
         }else{
             //white just played
             try{
-                if(game.getBoard().isKingInCheck(false)){
-                    if(!game.getBoard().canPlayerPlay(Color.BLACK)){
+                if(board.isKingInCheck(false)){
+                    if(!board.canPlayerPlay(Color.BLACK)){
                         //black has been checkmated
                         return GameState.WHITE_WIN;
                     }else{
                         return GameState.ACTIVE;
                     }
                 }else{
-                    if(!game.getBoard().canPlayerPlay(Color.BLACK)){
+                    if(!board.canPlayerPlay(Color.BLACK)){
                         return GameState.DRAW;
                     }else{
                         return GameState.ACTIVE;
@@ -324,7 +344,6 @@ public class GameService {
             white.setElo(EloCalculator.calculateEloAfterLoss(whiteElo, blackELo));
             black.setElo(EloCalculator.calculateEloAfterWin(blackELo, whiteElo));
         }
-
     }
 
 

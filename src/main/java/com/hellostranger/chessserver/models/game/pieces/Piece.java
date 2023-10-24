@@ -1,9 +1,10 @@
-package com.hellostranger.chessserver.models.game;
+package com.hellostranger.chessserver.models.game.pieces;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.hellostranger.chessserver.models.enums.Color;
 import com.hellostranger.chessserver.models.enums.PieceType;
-import lombok.Data;
+import com.hellostranger.chessserver.models.game.Board;
+import com.hellostranger.chessserver.models.game.Square;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,19 +15,56 @@ import lombok.extern.slf4j.Slf4j;
 @Setter
 @EqualsAndHashCode
 @Slf4j
-public class Piece {
+public abstract class Piece {
 
-    private Color color;
+    protected Color color;
 
-    private PieceType pieceType;
+    protected PieceType pieceType;
 
-    private Boolean hasMoved;
+    protected Boolean hasMoved;
 
-    @JsonIgnore
-    private int colIndex;
 
-    @JsonIgnore
-    private int rowIndex;
+    protected int colIndex;
+
+
+    protected int rowIndex;
+
+    protected Piece(Color color, PieceType type, Boolean hasMoved, Square currentSquare){
+        this.color = color;
+        this.pieceType = type;
+        this.hasMoved = hasMoved;
+        this.colIndex = currentSquare.getColIndex();
+        this.rowIndex = currentSquare.getRowIndex();
+    }
+
+    protected Piece(Color color, PieceType type, Boolean hasMoved, int colIndex, int rowIndex){
+        this.color = color;
+        this.pieceType = type;
+        this.hasMoved = hasMoved;
+        this.colIndex = colIndex;
+        this.rowIndex = rowIndex;
+
+
+    }
+    public Piece(Piece otherPiece){
+        this.color = otherPiece.getColor();
+        this.pieceType = otherPiece.getPieceType();
+        this.hasMoved = otherPiece.getHasMoved();
+        this.colIndex = otherPiece.getColIndex();
+        this.rowIndex = otherPiece.getRowIndex();
+
+    }
+
+    //Simply changes the position of the piece.
+    public void move(Square target){
+        this.colIndex = target.getColIndex();
+        this.rowIndex = target.getRowIndex();
+    }
+
+    public abstract Square[] getThreatenedSquares(Board board);
+
+    public abstract Square[] getMovableSquares(Board board);
+
 
 
     @Override
@@ -40,36 +78,9 @@ public class Piece {
                 '}';
     }
 
-    public Piece(Color color, PieceType type, Boolean hasMoved, Square currentSquare){
-        this.color = color;
-        this.pieceType = type;
-        this.hasMoved = hasMoved;
-        this.colIndex = currentSquare.getColIndex();
-        this.rowIndex = currentSquare.getRowIndex();
 
 
-    }
-
-    public Piece(Color color, PieceType type, Boolean hasMoved, int colIndex, int rowIndex){
-        this.color = color;
-        this.pieceType = type;
-        this.hasMoved = hasMoved;
-        this.colIndex = colIndex;
-        this.rowIndex = rowIndex;
-
-
-    }
-
-    public Piece(Piece otherPiece){
-        this.color = otherPiece.getColor();
-        this.pieceType = otherPiece.getPieceType();
-        this.hasMoved = otherPiece.getHasMoved();
-        this.colIndex = otherPiece.getColIndex();
-        this.rowIndex = otherPiece.getRowIndex();
-
-    }
-
-    public Boolean canMakeMove(Square currentSquare, Square targetSquare){
+    /*public Boolean canMakeMove(Square currentSquare, Square targetSquare){
         switch (pieceType) {
             case KING -> {
                 return canKingMove(currentSquare, targetSquare);
@@ -93,8 +104,8 @@ public class Piece {
 
         log.info("CanPieceMove didn't return from switch.");
         return false;
-    }
-    private Boolean canKingMove(Square currentSquare, Square targetSquare) {
+    }*/
+    /*private Boolean canKingMove(Square currentSquare, Square targetSquare) {
         if (targetSquare.getPiece() != null && targetSquare.getPiece().getColor() == this.getColor()) {
             //the king and rook haven't moved, so its castling
             return !hasMoved && targetSquare.getPiece().pieceType == PieceType.ROOK && !targetSquare.getPiece().getHasMoved();
@@ -190,7 +201,7 @@ public class Piece {
             }
         }
         return false;
-    }
+    }*/
 
 
 }

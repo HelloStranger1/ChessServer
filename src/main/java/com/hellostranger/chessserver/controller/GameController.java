@@ -64,7 +64,7 @@ public class GameController {
 
     /*@GetMapping("/{gameId}/playerOne/name")
     public ResponseEntity<String> getPlayerOneName(@PathVariable String gameId){
-        Game game = null;
+        ghghghgghgghghghghghg       Game game = null;
         try{
             game = gameService.getGameById(gameId);
         } catch (NotFoundException e){

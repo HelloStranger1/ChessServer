@@ -15,6 +15,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+import static java.util.Collections.reverse;
+
 @Service
 public class UserService {
     @Autowired
@@ -35,6 +37,9 @@ public class UserService {
         List<GameRepresentation> gamesHistory = gameRepresentationRepository.findByWhitePlayerOrBlackPlayerOrderByDateDesc(user, user).orElse(new ArrayList<>());
         List<GameHistoryResponse> response = new ArrayList<>();
         for (GameRepresentation gameRepresentation : gamesHistory) {
+            if(gameRepresentation.getResult() == null){
+                continue;
+            }
             User blackPlayer = gameRepresentation.getBlackPlayer();
             User whitePlayer = gameRepresentation.getWhitePlayer();
             Color opponentColor;
@@ -64,9 +69,11 @@ public class UserService {
                             .result(gameRepresentation.getResult())
                             .opponentColor(opponentColor)
                             .gameMoves(gameMoves.toString())
+                            .id(gameRepresentation.getId())
                             .build()
             );
         }
+        reverse(response);
         return response;
     }
     public void addFriend(User user, User friend) {
