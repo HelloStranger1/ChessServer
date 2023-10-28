@@ -58,7 +58,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
         String gameId = extractGameId(Objects.requireNonNull(session.getUri()).getPath());
         String messageJson = message.getPayload();
 
-        log.info("handleTextMessage. Message is: "+ messageJson);
+        log.info("handleTextMessage. Message is: "+ messageJson + "\n");
 
         Game currentGame = gameService.getGameById(gameId);
 
@@ -87,11 +87,9 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             String causeMessage;
             GameState gameResult;
             if(Objects.equals(concedeGameMessage.getPlayerEmail(), currentGame.getWhitePlayer().getEmail())){
-                log.info("White resigned. message email: " + concedeGameMessage.getPlayerEmail() + "and black email: "+ currentGame.getBlackPlayer().getEmail() + "and white's:" + currentGame.getWhitePlayer().getEmail());
                 causeMessage = "Black won by resignation";
                 gameResult = GameState.BLACK_WIN;
             }else{
-                log.info("Black resigned. message email: " + concedeGameMessage.getPlayerEmail() + "and black email: "+ currentGame.getBlackPlayer().getEmail() + "and white's:" + currentGame.getWhitePlayer().getEmail());
                 causeMessage = "White won by resignation";
                 gameResult = GameState.WHITE_WIN;
             }
@@ -107,12 +105,12 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         Game updatedGame;
-        boolean isCastleMove = false;
+        /*boolean isCastleMove = false;
         try{
             isCastleMove = isCastle(currentGame, moveMessage);
         } catch (SquareNotFoundException e) {
             log.error("In HandleMessage, isCastle threw SquareNotFoundException e: " + e.getMsg());
-        }
+        }*/
 
         try{
             updatedGame = gameService.makeMove(gameId, moveMessage);
@@ -134,13 +132,14 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
         }
         if(updatedGame != null){
             log.info("Updated game isn't null. state is: " + updatedGame.getGameState());
-            if (isCastleMove){
+            sendMessageToAllPlayers(gameId, moveMessage);
+            /*if (isCastleMove){
                 MoveMessage[] castleMoves = gameService.convertCastleToMoves(moveMessage);
                 sendMessageToAllPlayers(gameId, castleMoves[0]);
                 sendMessageToAllPlayers(gameId, castleMoves[1]);
             }else{
                 sendMessageToAllPlayers(gameId, moveMessage);
-            }
+            }*/
             if (updatedGame.getGameState() == GameState.WHITE_WIN ||
                     updatedGame.getGameState() == GameState.BLACK_WIN ||
                     updatedGame.getGameState() == GameState.DRAW) {
@@ -177,13 +176,13 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
         return null;
     }
 
-    private boolean isCastle(Game game, MoveMessage moveMessage) throws SquareNotFoundException {
+    /*private boolean isCastle(Game game, MoveMessage moveMessage) throws SquareNotFoundException {
         Board board = game.getBoard();
         return board.isCastlingMove(
                 board.getSquareAt(moveMessage.getStartCol(), moveMessage.getStartRow()),
                 board.getSquareAt(moveMessage.getEndCol(), moveMessage.getEndRow()));
 
-    }
+    }*/
 
     private void sendMessageToAllPlayers(String gameId, Message message) throws IOException {
         Gson gson = new Gson();

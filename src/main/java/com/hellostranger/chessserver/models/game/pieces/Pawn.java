@@ -47,7 +47,6 @@ public class Pawn extends Piece{
         }else{
             increments = SPOT_INCREMENTS_MOVE_FIRST;
         }
-
         for(int[] increment : increments) {
             Square target;
             if (this.color == Color.WHITE) {

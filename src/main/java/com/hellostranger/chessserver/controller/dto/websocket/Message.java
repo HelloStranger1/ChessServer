@@ -12,9 +12,6 @@ public class Message {
     public Message(MessageType messageType){
         this.messageType = messageType;
     }
-    public Message(){
-        this.messageType = null;
-    }
 
     @Override
     public String toString() {

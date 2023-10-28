@@ -22,10 +22,6 @@ public class MoveRepresentation {
     private int endRow;
     private MoveType moveType;
 
-    /*@ManyToOne
-    @JoinColumn(name = "gameRepresentation_id")
-    @JsonIgnore
-    private GameRepresentation game;*/
 
     @Override
     public String toString(){

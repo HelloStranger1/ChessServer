@@ -2,11 +2,9 @@ package com.hellostranger.chessserver.controller.dto.websocket;
 
 
 import com.hellostranger.chessserver.models.enums.GameState;
-import com.hellostranger.chessserver.models.game.Move;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.List;
 
 
 @Getter

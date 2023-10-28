@@ -8,7 +8,7 @@ import com.hellostranger.chessserver.models.game.Square;
 import java.util.ArrayList;
 
 public class Knight extends Piece{
-    private static final int[][] SPOT_INCREMENTS = {{2,1}, {2,1}, {-2,1},{-2,-1}, {1,2}, {1,-2}, {-1,2}, {-1,-2}};
+    private static final int[][] SPOT_INCREMENTS = {{2,1}, {2,-1}, {-2,1},{-2,-1}, {1,2}, {1,-2}, {-1,2}, {-1,-2}};
 
     public Knight(Color color, Square currentSquare){
         super(color, PieceType.KNIGHT, false, currentSquare);

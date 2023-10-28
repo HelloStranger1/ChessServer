@@ -22,15 +22,15 @@ public class FriendRequestService {
         User sender = userRepository.findByEmail(senderEmail).orElseThrow();
         User recipient = userRepository.findByEmail(recipientEmail).orElseThrow();
 
-        if (sender != null && recipient != null) {
-            FriendRequest friendRequest = new FriendRequest();
-            friendRequest.setSender(sender);
-            friendRequest.setRecipient(recipient);
-            friendRequest.setStatus(RequestStatus.PENDING);
-            friendRequestRepository.save(friendRequest);
-            userRepository.save(sender);
-            userRepository.save(recipient);
-        }
+
+        FriendRequest friendRequest = new FriendRequest();
+        friendRequest.setSender(sender);
+        friendRequest.setRecipient(recipient);
+        friendRequest.setStatus(RequestStatus.PENDING);
+        friendRequestRepository.save(friendRequest);
+        userRepository.save(sender);
+        userRepository.save(recipient);
+
     }
 
     public List<FriendRequest> getPendingFriendRequests(String userEmail) {
@@ -38,8 +38,7 @@ public class FriendRequestService {
         if (user == null) {
             throw new IllegalArgumentException("User not found.");
         }
-        List<FriendRequest> pendingRequests = friendRequestRepository.findByRecipientAndStatus(user, RequestStatus.PENDING).orElseThrow();
-        return pendingRequests;
+        return friendRequestRepository.findByRecipientAndStatus(user, RequestStatus.PENDING).orElseThrow();
     }
 
     public void acceptFriendRequest(String userEmail, Integer requestId) {

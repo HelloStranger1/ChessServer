@@ -27,4 +27,5 @@ public class GameStorage {
     public void setGame(Game game){
         games.put(game.getId(), game);
     }
+    public void removeGame(Game game){games.remove(game.getId());}
 }

@@ -26,16 +26,6 @@ public class Square {
         this.rowIndex = rowIndex;
     }
 
-    /*Square(Square otherSquare){
-        this.board = otherSquare.getBoard();
-        if(otherSquare.getPiece() != null){
-            this.piece = new Piece(otherSquare.getPiece());
-        } else{
-            this.piece = null;
-        }
-        this.colIndex = otherSquare.getColIndex();
-        this.rowIndex = otherSquare.getRowIndex();
-    }*/
 
     @Override
     public String toString() {

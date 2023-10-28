@@ -2,7 +2,6 @@ package com.hellostranger.chessserver.controller.dto.websocket;
 
 
 import com.hellostranger.chessserver.models.enums.MoveType;
-import com.hellostranger.chessserver.models.enums.PieceType;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -14,9 +13,7 @@ public class MoveMessage extends Message {
     private int startRow;
     private int endCol;
     private int endRow;
-    /*private boolean isSecondCastleMove = false;*/
     private MoveType moveType;
-    /*private PieceType promotionType = null;*/
 
     public MoveMessage(String playerEmail, int startCol, int startRow, int endCol, int endRow){
         super(MessageType.MOVE);

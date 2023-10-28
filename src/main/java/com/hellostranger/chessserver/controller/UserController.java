@@ -3,7 +3,6 @@ package com.hellostranger.chessserver.controller;
 import com.hellostranger.chessserver.controller.dto.GameHistoryResponse;
 import com.hellostranger.chessserver.controller.dto.UpdateRequest;
 import com.hellostranger.chessserver.models.entities.FriendRequest;
-import com.hellostranger.chessserver.models.entities.GameRepresentation;
 
 import com.hellostranger.chessserver.models.entities.User;
 import com.hellostranger.chessserver.service.FriendRequestService;
@@ -16,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Objects;
+
 
 @RestController
 @Slf4j
