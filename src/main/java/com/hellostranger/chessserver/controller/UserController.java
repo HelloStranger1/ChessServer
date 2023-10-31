@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 
 
 @RestController
@@ -97,12 +98,27 @@ public class UserController {
     public ResponseEntity<String> sendFriendRequest(
             @PathVariable("userEmail") String userEmail,
             @RequestParam("recipientEmail") String recipientEmail) {
+        if(Objects.equals(recipientEmail, userEmail)){
+            String errorMessage = "Can't send friend request to yourself";
+            return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body(errorMessage);
+        }
+        if(friendRequestService.areUsersFriends(userEmail, recipientEmail)){
+            String errorMessage = "Can't send friend request to a friend";
+            return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body(errorMessage);
+        }
+        List<FriendRequest> recipientPendingRequests = friendRequestService.getPendingFriendRequests(recipientEmail);
+        for(FriendRequest request : recipientPendingRequests){
+            if(Objects.equals(request.getSender().getEmail(), userEmail)){
+                String errorMessage = "You have already send a friend request to the user with email " + recipientEmail ;
+                return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body(errorMessage);
+            }
+        }
 
         friendRequestService.sendFriendRequest(userEmail, recipientEmail);
         return ResponseEntity.ok("Friend request sent.");
     }
 
-    @GetMapping("/{userEmail}/friend-requests")
+    @GetMapping("/{userEmail}/get-friend-requests")
     public ResponseEntity<List<FriendRequest>> getFriendRequests(
             @PathVariable("userEmail") String userEmail) {
 
@@ -117,6 +133,37 @@ public class UserController {
 
         friendRequestService.acceptFriendRequest(userEmail, requestId);
         return ResponseEntity.ok("Friend request accepted.");
+    }
+
+    @GetMapping("/get-friends/{userEmail}")
+    public ResponseEntity<?> getFriends(@PathVariable("userEmail") String userEmail){
+        try{
+            User user = userService.getUserByEmail(userEmail);
+            List<User> friends = user.getFriends();
+            return ResponseEntity.ok(friends);
+        } catch (NoSuchElementException e){
+            String errorMessage = "User with email " + userEmail + " not found.";
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorMessage);
+        }
+    }
+    @PostMapping("/remove-friend/{userEmail}")
+    public ResponseEntity<String> removeFriend(
+            @PathVariable("userEmail") String userEmail,
+            @RequestParam("friendEmail") String friendEmail){
+        try{
+            User user = userService.getUserByEmail(userEmail);
+            User friend = userService.getUserByEmail(friendEmail);
+            List<User> friends = user.getFriends();
+            int originalSize = friends.size();
+            friends.remove(friend);
+            if(originalSize != friends.size()){
+                friend.getFriends().remove(user);
+            }
+            return ResponseEntity.ok("Friend Removed Successfully");
+        } catch (NoSuchElementException e){
+            String errorMessage = "Friend with email " + friendEmail + " not found.";
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorMessage);
+        }
     }
 }
 

@@ -10,7 +10,7 @@ import lombok.Data;
 public class FriendRequest {
     @Id
     @GeneratedValue
-    private Long id;
+    private Integer id;
 
     @ManyToOne
     private User sender;

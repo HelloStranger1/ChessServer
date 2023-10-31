@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class FriendRequestService {
@@ -22,7 +23,6 @@ public class FriendRequestService {
         User sender = userRepository.findByEmail(senderEmail).orElseThrow();
         User recipient = userRepository.findByEmail(recipientEmail).orElseThrow();
 
-
         FriendRequest friendRequest = new FriendRequest();
         friendRequest.setSender(sender);
         friendRequest.setRecipient(recipient);
@@ -32,7 +32,14 @@ public class FriendRequestService {
         userRepository.save(recipient);
 
     }
-
+    public Boolean areUsersFriends(String u1Email, String u2Email){
+        for(User user : userRepository.findByEmail(u1Email).orElseThrow().getFriends()){
+            if(Objects.equals(user.getEmail(), u2Email)){
+                return true;
+            }
+        }
+        return false;
+    }
     public List<FriendRequest> getPendingFriendRequests(String userEmail) {
         User user = userRepository.findByEmail(userEmail).orElse(null);
         if (user == null) {
