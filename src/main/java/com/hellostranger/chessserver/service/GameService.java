@@ -271,45 +271,35 @@ public class GameService {
         Board board = game.getBoard();
         if(game.getIsP1turn()){
             //black just played his move. check if white king is in check:
-            try{
-                if(board.isKingInCheck(true)){
-                    if(!board.canPlayerPlay(Color.WHITE)){
-                        //black has been checkmated
-                        return GameState.BLACK_WIN;
-                    }else{
-                        return GameState.ACTIVE;
-                    }
+            if(board.isKingInCheck(true)){
+                if(!board.canPlayerPlay(Color.WHITE)){
+                    //black has been checkmated
+                    return GameState.BLACK_WIN;
                 }else{
-                    if(!board.canPlayerPlay(Color.WHITE)){
-                        return GameState.DRAW;
-                    }else{
-                        return GameState.ACTIVE;
-                    }
+                    return GameState.ACTIVE;
                 }
-            } catch (SquareNotFoundException e){
-                log.info("isGameOver square not found: " + e.getMsg());
-                return GameState.ACTIVE;
+            }else{
+                if(!board.canPlayerPlay(Color.WHITE)){
+                    return GameState.DRAW;
+                }else{
+                    return GameState.ACTIVE;
+                }
             }
         }else{
             //white just played
-            try{
-                if(board.isKingInCheck(false)){
-                    if(!board.canPlayerPlay(Color.BLACK)){
-                        //black has been checkmated
-                        return GameState.WHITE_WIN;
-                    }else{
-                        return GameState.ACTIVE;
-                    }
+            if(board.isKingInCheck(false)){
+                if(!board.canPlayerPlay(Color.BLACK)){
+                    //black has been checkmated
+                    return GameState.WHITE_WIN;
                 }else{
-                    if(!board.canPlayerPlay(Color.BLACK)){
-                        return GameState.DRAW;
-                    }else{
-                        return GameState.ACTIVE;
-                    }
+                    return GameState.ACTIVE;
                 }
-            } catch (SquareNotFoundException e){
-                log.info("isGameOver square not found: " + e.getMsg());
-                return GameState.ACTIVE;
+            }else{
+                if(!board.canPlayerPlay(Color.BLACK)){
+                    return GameState.DRAW;
+                }else{
+                    return GameState.ACTIVE;
+                }
             }
         }
     }

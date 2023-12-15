@@ -47,6 +47,13 @@ public class Board {
         }
     }
 
+    /**
+     * returns the square object at the specified row and col.
+     * @param col - The col of the square
+     * @param row - the row of the square
+     * @return The Square
+     * @throws SquareNotFoundException - if the square is not within the bounds of the board.
+     */
     public Square getSquareAt(int col, int row) throws SquareNotFoundException {
         if(row >= 8 || row < 0 || col >= 8 || col < 0){
             throw new SquareNotFoundException("Square not in Board");
@@ -58,6 +65,13 @@ public class Board {
         pawnSquare.getPiece().setPieceType(promotionType);
     }
 
+
+    /**
+     * Check if a move from the start square to the end would be a castling move
+     * @param start - The start square
+     * @param end - the end square
+     * @return whether or not the move would be a castling move
+     */
 
     public boolean isCastlingMove(Square start, Square end){
         Piece startPiece = start.getPiece();
@@ -78,30 +92,33 @@ public class Board {
         return true;
     }
 
+    /**
+     * Check for the validity of the move
+     * @param start - the start square for the move
+     * @param end - the end square for the move
+     * @return whether the move is valid
+     */
     public boolean isValidMove(Square start, Square end){
         Piece movingPiece = start.getPiece();
+
         if(movingPiece == null){
-            log.info("Move is invalid because startingPiece is null");
             return false;
         }
+
         if(!canPieceMoveTo(movingPiece, end)){
-            log.info("Move is invalid because piece can't move to");
             return false;
         }
 
         boolean isCastlingMove = isCastlingMove(start, end);
         boolean isFirstMove = !movingPiece.getHasMoved();
         Piece capturedPiece = end.getPiece();
+
         if(isCastlingMove){
             //For a castling move to be legal, the king can't be in check. first, we check that:
-            try{
-                if(isKingInCheck(movingPiece.getColor() == Color.WHITE)){
-                    return false;
-                }
-            } catch (SquareNotFoundException e){
-                log.error("IsValidMove failed to check if king is in check cause square was not found");
+            if(isKingInCheck(movingPiece.getColor() == Color.WHITE)){
+                return false;
             }
-            //The king cannot move into a square where it would be check while performing the castle, so we check for that.
+            //The king cannot move into a square where it would be checked while performing the castle, so we check for that.
             if(end.getColIndex() > start.getColIndex() && !isValidMove(start, squaresArray[start.getRowIndex()][start.getColIndex() + 1])){
                 //O-O
                 return false;
@@ -114,13 +131,7 @@ public class Board {
             movePieceTemp(start, end);
         }
 
-        boolean isLegalMove = true;
-        try{
-            isLegalMove = !isKingInCheck(movingPiece.getColor() == Color.WHITE);
-        } catch (SquareNotFoundException e){
-            log.info("isValidMove error: " + e.getMsg());
-        }
-
+        boolean isLegalMove = !isKingInCheck(movingPiece.getColor() == Color.WHITE);
         if(isCastlingMove){
             undoCastlingMove(start, end);
         }
@@ -157,17 +168,22 @@ public class Board {
         return result;
     }
 
-
-
+    /**
+     * Check if the player has a move
+     * @param playerColor The color of the player we want to test
+     * @return True - if the player has a move, false otherwise.
+     */
     public boolean canPlayerPlay(Color playerColor){
         log.info("checking if player: "+ playerColor + "can play");
         for(int row = 0; row < 8; row++){
             for(int col = 0; col < 8; col++){
                 Square currentSquare = squaresArray[row][col];
-                if(currentSquare.getPiece() != null && currentSquare.getPiece().getColor() == playerColor){
-                    if(doesPieceHaveAMove(currentSquare.getPiece(), currentSquare)){
-                        return true;
-                    }
+                Piece currentPiece = currentSquare.getPiece();
+                if(currentPiece == null || currentPiece.getColor() != playerColor){
+                    continue;
+                }
+                if(doesPieceHaveAMove(currentPiece, currentSquare)){
+                    return true;
                 }
             }
         }
@@ -184,24 +200,34 @@ public class Board {
     }
 
 
+    /**
+     * Check if the king of the provided color is in check
+     * @param isWhite The color of the king
+     * @return True: if the king is in check, false otherwise
+     */
 
-    public boolean isKingInCheck(boolean isWhite) throws SquareNotFoundException {
+    public boolean isKingInCheck(boolean isWhite) {
         Square kingSquare;
-        if(isWhite){
-            kingSquare = getSquareAt(whiteKing.getColIndex(), whiteKing.getRowIndex());
-        } else{
-            kingSquare = getSquareAt(blackKing.getColIndex(), blackKing.getRowIndex());
+        try{
+            if(isWhite){
+                kingSquare = getSquareAt(whiteKing.getColIndex(), whiteKing.getRowIndex());
+            } else{
+                kingSquare = getSquareAt(blackKing.getColIndex(), blackKing.getRowIndex());
+            }
+        } catch (SquareNotFoundException e) {
+            return false;
         }
 
         for(int row = 0; row < 8; row++){
             for(int col = 0; col < 8; col++){
                 Square currentSquare = squaresArray[row][col];
                 Piece piece = currentSquare.getPiece();
-                if(piece != null && isWhite != (piece.getColor() == Color.WHITE)){
-                    if(canPieceThreatenSquare(piece, kingSquare)){
-                        log.info("\n \n isKingInCheck king is in check. by piece: \n" + piece + "\n \n");
-                        return true;
-                    }
+                if(piece == null || isWhite == (piece.getColor() == Color.WHITE)){
+                    continue;
+                }
+                if (canPieceThreatenSquare(piece, kingSquare)) {
+                    log.info("\n \n isKingInCheck king is in check. by piece: \n" + piece + "\n \n");
+                    return true;
                 }
             }
         }
@@ -209,6 +235,9 @@ public class Board {
 
     }
 
+    /**
+     * Performs a move. this function doesn't validate the move, simply plays it.
+     */
     public void movePiece(Square start, Square end){
         //this function does not care if the move is legal. just makes it (assumes piece at start isn't null).
         Piece movingPiece = start.getPiece();
@@ -226,6 +255,9 @@ public class Board {
         }
     }
 
+    /**
+     * A simpler version of movePiece, meant to temporarily check something. ignores en-peasant.
+     */
     public void movePieceTemp(Square start, Square end){
         //this function does not care if the move is legal. just makes it (assumes piece at start isn't null).
         Piece movingPiece = start.getPiece();
@@ -235,7 +267,9 @@ public class Board {
         movingPiece.move(end);
     }
 
-
+    /**
+     * play the move necessary for castle
+     */
     public void makeCastlingMove(Square start, Square end){
         //doesn't care if the move is legal. start -> king, end -> rook
         if(end.getColIndex() > start.getColIndex()){
@@ -392,6 +426,10 @@ public class Board {
         return curSquare;
     }
 
+    /**
+     * used to print the board to the console, for testing
+     * @return a string representation of the board
+     */
     public String toStringPretty() {
         StringBuilder desc = new StringBuilder(" \n");
         int i;
