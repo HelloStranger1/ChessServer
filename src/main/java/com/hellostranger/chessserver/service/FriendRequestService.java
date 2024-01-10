@@ -48,6 +48,33 @@ public class FriendRequestService {
         return friendRequestRepository.findByRecipientAndStatus(user, RequestStatus.PENDING).orElseThrow();
     }
 
+    public void updateStateOfFriendRequest(RequestStatus requestStatus, String userEmail, Integer requestId){
+        User user = userRepository.findByEmail(userEmail).orElse(null);
+        if (user == null) {
+            throw new IllegalArgumentException("User not found.");
+        }
+
+        FriendRequest friendRequest = friendRequestRepository.findById(requestId).orElse(null);
+        if (friendRequest == null) {
+            throw new IllegalArgumentException("Friend request not found.");
+        }
+
+        if (!friendRequest.getRecipient().equals(user)) {
+            throw new IllegalArgumentException("You cannot accept this friend request.");
+        }
+
+        friendRequest.setStatus(requestStatus);
+        friendRequestRepository.save(friendRequest);
+
+        if(requestStatus == RequestStatus.ACCEPTED){
+            User sender = friendRequest.getSender();
+            user.getFriends().add(sender);
+            sender.getFriends().add(user);
+            userRepository.save(sender);
+        }
+        userRepository.save(user);
+
+    }
     public void acceptFriendRequest(String userEmail, Integer requestId) {
         User user = userRepository.findByEmail(userEmail).orElse(null);
         if (user == null) {
