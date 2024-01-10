@@ -29,6 +29,8 @@ public class User implements UserDetails {
 
     private String email;
 
+    private Boolean isActive = false;
+
     @Builder.Default private Integer elo = 800;
 
     @Builder.Default private String image = "";
