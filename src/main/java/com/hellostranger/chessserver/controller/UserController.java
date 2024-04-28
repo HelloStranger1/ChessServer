@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.parameters.P;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -106,6 +107,18 @@ public class UserController {
         }
     }
 
+    @GetMapping("/game-history/by-id/{gameId}")
+    public ResponseEntity<?> getGameHistoryById(
+            @PathVariable("gameId") Integer gameRepresentationId
+    ) {
+        try {
+            GameHistoryResponse response = userService.getGameHistoryByID(gameRepresentationId);
+            return ResponseEntity.ok(response);
+        } catch (NoSuchElementException e) {
+            String errorMessage = "Game with id " + gameRepresentationId + " not found.";
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorMessage);
+        }
+    }
     @GetMapping("/games-history/{userEmail}")
     public ResponseEntity<?> getGamesHistory(
             @PathVariable("userEmail") String userEmail

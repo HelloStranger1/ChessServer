@@ -27,6 +27,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final TokenRepository tokenRepository;
 
     private final static int BEARER_LENGTH = 7;
+
     @Override
     protected void doFilterInternal(
             @NonNull HttpServletRequest request,

@@ -1,7 +1,6 @@
 package com.hellostranger.chessserver.service;
 
 import com.hellostranger.chessserver.controller.dto.GameHistoryResponse;
-import com.hellostranger.chessserver.models.UserActivity;
 import com.hellostranger.chessserver.models.entities.MoveRepresentation;
 import com.hellostranger.chessserver.models.entities.GameRepresentation;
 import com.hellostranger.chessserver.models.entities.User;
@@ -16,11 +15,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.Collections.reverse;
@@ -36,40 +33,59 @@ public class UserService {
     GameRepresentationRepository gameRepresentationRepository;
 
 
-    private Map<User, UserActivity> userActivityMap = new ConcurrentHashMap<>();
     public User getUserByEmail(String userEmail) throws NoSuchElementException {
-        return userRepository.findByEmail(userEmail).orElseThrow();
-    }
-
-    @Scheduled(fixedRate = 90000)
-    public void checkInactiveUsers(){
-
-        LocalDateTime currentTime = LocalDateTime.now();
-        log.info(currentTime.toString());
-        for(Map.Entry<User, UserActivity> entry : userActivityMap.entrySet()){
-            User user = entry.getKey();
-            UserActivity userActivity = entry.getValue();
-
-            if(userActivity.getLastActiveTime().plusMinutes(1).isBefore(currentTime)){
-                user.setIsActive(false);
-                userRepository.save(user);
-                userActivityMap.remove(user);
-            }
+        User user =  userRepository.findByEmail(userEmail).orElseThrow();
+        if (isActive((user)) && !user.getIsActive()) {
+            user.setIsActive(true);
+            userRepository.save(user);
+        } else if (user.getIsActive() && !isActive(user)) {
+            user.setIsActive(false);
+            userRepository.save(user);
         }
+        return user;
     }
+//
+//    @Scheduled(fixedRate = 90000)
+//    public void checkInactiveUsers(){
+//
+//        LocalDateTime currentTime = LocalDateTime.now();
+//        log.info(currentTime.toString());
+//        for(Map.Entry<User, UserActivity> entry : userActivityMap.entrySet()){
+//            User user = userRepository.findByEmail(entry.getKey().getEmail()).orElseThrow();
+//            UserActivity userActivity = entry.getValue();
+//
+//            if(userActivity.getLastActiveTime().plusMinutes(1).isBefore(currentTime)){
+//                user.setIsActive(false);
+//                userRepository.save(user);
+//                userActivityMap.remove(user);
+//            }
+//        }
+//    }
     public boolean isActive(@NonNull User user){
-        return user.getIsActive();
+        return user.getLastTimeActive().plusMinutes(1).isAfter(LocalDateTime.now());
     }
     public void keepAlive(@NonNull User user){
         user.setIsActive(true);
+        user.setLastTimeActive(LocalDateTime.now());
         userRepository.save(user);
-        userActivityMap.put(user, new UserActivity(user.getId(), LocalDateTime.now()));
     }
 
     public void saveUser(User user){
+        if (isActive((user)) && !user.getIsActive()) {
+            user.setIsActive(true);
+        } else if (user.getIsActive() && !isActive(user)) {
+            user.setIsActive(false);
+        }
         userRepository.save(user);
+
     }
 
+    public GameHistoryResponse getGameHistoryByID(Integer id) throws NoSuchElementException{
+        GameRepresentation response = gameRepresentationRepository.findById(id).orElseThrow();
+        //This is only used to review the game, so it doesn't fully work with opponent.
+        //TODO: Fix it
+        return getResponseFromRepresentation(response, null);
+    }
     public List<GameHistoryResponse> getUsersGameHistory(User user){
         List<GameRepresentation> gamesHistory = gameRepresentationRepository.findByWhitePlayerOrBlackPlayerOrderByDateDesc(user, user).orElse(new ArrayList<>());
         List<GameHistoryResponse> response = new ArrayList<>();
@@ -77,42 +93,32 @@ public class UserService {
             if(gameRepresentation.getResult() == null){
                 continue;
             }
-            User blackPlayer = gameRepresentation.getBlackPlayer();
-            User whitePlayer = gameRepresentation.getWhitePlayer();
-            Color opponentColor;
-            if (whitePlayer == user) {
-                opponentColor = Color.BLACK;
+            response.add(getResponseFromRepresentation(gameRepresentation, user));
 
-            } else {
-                opponentColor = Color.WHITE;
-            }
-            StringBuilder gameMoves = new StringBuilder();
-            List<MoveRepresentation> moves = gameRepresentation.getMoveRepresentations();
-            for (MoveRepresentation move : moves) {
-                gameMoves.append(move.toString());
-            }
-
-            response.add(
-                    GameHistoryResponse
-                            .builder()
-                            .whiteImage(whitePlayer.getImage())
-                            .blackImage(blackPlayer.getImage())
-                            .whiteName(whitePlayer.getName())
-                            .blackName(blackPlayer.getName())
-                            .whiteElo(whitePlayer.getElo())
-                            .blackElo(blackPlayer.getElo())
-                            .startBoardJson(gameRepresentation.getStartBoardJson())
-                            .gameDate(gameRepresentation.getDate())
-                            .result(gameRepresentation.getResult())
-                            .opponentColor(opponentColor)
-                            .gameMoves(gameMoves.toString())
-                            .id(gameRepresentation.getId())
-                            .build()
-            );
         }
         reverse(response);
         return response;
     }
+    private GameHistoryResponse getResponseFromRepresentation(GameRepresentation representation, User user) {
+        User blackPlayer = representation.getBlackPlayer();
+        User whitePlayer = representation.getWhitePlayer();
+        Color opponentColor;
+        if (whitePlayer == user) {
+            opponentColor = Color.BLACK;
+        } else {
+            opponentColor = Color.WHITE;
+        }
+        StringBuilder gameMoves = new StringBuilder();
+
+        for (MoveRepresentation move : representation.getMoveRepresentations()) {
+            gameMoves.append(move.toString());
+        }
+
+        return new GameHistoryResponse(representation,
+                        whitePlayer, blackPlayer, opponentColor, gameMoves.toString());
+    }
+
+
     public void addFriend(User user, User friend) {
         user.getFriends().add(friend);
         friend.getFriends().add(user);

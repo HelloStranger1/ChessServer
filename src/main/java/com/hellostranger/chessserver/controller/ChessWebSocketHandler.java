@@ -28,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class ChessWebSocketHandler extends TextWebSocketHandler {
     private final Map<String, Set<WebSocketSession>> gameSessions = new ConcurrentHashMap<>();
+    private final Map<WebSocketSession, String> sessionEmailMap = new ConcurrentHashMap<>();
     private final GameService gameService;
 
 
@@ -35,75 +36,139 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
      * Called when someone connects to the Websocket.
      * If there are 2 players in the game, starts it.
      * @param session The WebSocketSession of the player who is joining
-     * @throws GameNotFoundException Thrown if are trying to join a non-existent game.
-     * @throws IOException Thrown if there was an I.O. error when trying to send the GameStartMessage
      */
     @Override
-    public void afterConnectionEstablished(WebSocketSession session) throws GameNotFoundException, IOException {
+    public void afterConnectionEstablished(WebSocketSession session) {
         String gameId = extractGameId(Objects.requireNonNull(session.getUri()).getPath());
-        if (gameId != null) {
-            // Add the session to the corresponding game session set
-            gameSessions.computeIfAbsent(gameId, k -> ConcurrentHashMap.newKeySet()).add(session);
-
-            Game currentGame = gameService.getGameById(gameId);
-
-            if(currentGame.getGameState() == GameState.ACTIVE){
-                User whitePlayer = currentGame.getWhitePlayer();
-                User blackPlayer = currentGame.getBlackPlayer();
-                GameStartMessage startMessage = new GameStartMessage(
-                       whitePlayer, blackPlayer);
-
-                sendMessageToAllPlayers(gameId, startMessage);
-            }
-
+        if (gameId == null) {
+            log.error("AfterConnectionEstablished. Couldn't extract gameId from path.");
+            return;
+        }
+        // Add the session to the corresponding game session set
+        gameSessions.computeIfAbsent(gameId, k -> ConcurrentHashMap.newKeySet()).add(session);
+        Game currentGame = gameService.getGameById(gameId);
+        if (currentGame == null) {
+            log.error("After connection established. Couldn't find game with id: " + gameId);
+            return;
         }
 
+        if (currentGame.getGameState() == GameState.ACTIVE) {
+            User whitePlayer = currentGame.getWhitePlayer();
+            User blackPlayer = currentGame.getBlackPlayer();
+            GameStartMessage startMessage = new GameStartMessage(whitePlayer, blackPlayer);
+            try {
+                sendMessageToAllPlayers(gameId, startMessage);
+            } catch (IOException e) {
+                log.error("After connection established. Couldn't send message to all players.", e);
+            }
+        }
     }
 
     /**
      * Called whenever a player sends a message.
      * @param session The relevant WebSocketSession of the game
      * @param message One of the possible Messages (Detailed in dto.websocket), in JSON.
-     * @throws IOException Thrown if there was an error when trying to send a message
-     * @throws GameNotFoundException Thrown if are trying to join a non-existent game.
      */
     @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException, GameNotFoundException {
+    protected void handleTextMessage(@NonNull WebSocketSession session, TextMessage message) {
 
         //Extracting gameId and the message
         String gameId = extractGameId(Objects.requireNonNull(session.getUri()).getPath());
+        if (gameId == null) {
+            log.error("HandleTextMessage. Couldn't extract gameId from path.");
+            return;
+        }
+
         String messageJson = message.getPayload();
 
         Game currentGame = gameService.getGameById(gameId);
+        if (currentGame == null) {
+            log.error("handleTextMessage. Couldn't find a game with id: " + gameId);
+            return;
+        }
 
         //Converting the Json into a Message object, the parent object of all other messages.
         Gson gson = new Gson();
         Message webSocketMessage = gson.fromJson(messageJson, Message.class);
         MessageType messageType = webSocketMessage.getMessageType();
 
+
         //If this is a start or end message we just want to send it, without changing, to everyone else
         if(messageType == MessageType.END || messageType == MessageType.START){
-            passTextMessageToAllPlayers(gameId, message);
-        }
-
-        if(webSocketMessage.getMessageType() == MessageType.CONCEDE){
-            handleConcedeMessage(currentGame, messageJson);
-        }
-
-        if (currentGame.getGameState() != GameState.ACTIVE || messageType != MessageType.MOVE) {
+            try {
+                passTextMessageToAllPlayers(session, gameId, message);
+            } catch (IOException e) {
+                log.error("handlemessage. had a problem sending message to everyone.");
+            }
+            log.info("I didn't think we would ever get this message since we are the ones sending it");
             return;
         }
 
-        //Message is a Move
+        if(webSocketMessage.getMessageType() == MessageType.CONCEDE){
+            ConcedeGameMessage concedeGameMessage = gson.fromJson(messageJson, ConcedeGameMessage.class);
+            try {
+                handleConcedeMessage(currentGame, concedeGameMessage);
+            } catch (IOException e) {
+                log.error("HandleMessage. Had a problem sending message to everyone.");
+            }
+
+            return;
+        }
+
+        if(webSocketMessage.getMessageType() == MessageType.INVALID_MOVE){
+            log.error("We are the ones sending this, we shouldn't receive it");
+            return;
+        }
+
+        if (webSocketMessage.getMessageType() == MessageType.DRAW_OFFER) {
+            try {
+                passTextMessageToAllPlayers(session, gameId,  message);
+            } catch (IOException e) {
+                log.error("handlemessage. had a problem sending message to everyone.");
+
+            }
+            Game game = gameService.getGameById(gameId);
+            DrawOfferMessage msg = gson.fromJson(messageJson, DrawOfferMessage.class);
+            if (msg.isWhite()) {
+                game.setIsDrawOfferedByWhite(true);
+            } else {
+                game.setIsDrawOfferedByBlack(true);
+            }
+
+            return;
+        }
+
+        if (webSocketMessage.getMessageType() != MessageType.MOVE) {
+            log.error("This should have been a move. The real type is: " + webSocketMessage.getMessageType());
+            return;
+        }
+
+        if (currentGame.getGameState() != GameState.ACTIVE) {
+            log.error("Game isn't active. you can't play a move yet");
+            return;
+        }
+
         MoveMessage moveMessage = gson.fromJson(messageJson, MoveMessage.class);
+
+        //The game has started, we need to save the user email
+        sessionEmailMap.computeIfAbsent(session, k -> moveMessage.getPlayerEmail());
+
         Game updatedGame = makeMove(gameId, moveMessage, session);
         if(updatedGame == null){
             return;
         }
-        sendMessageToAllPlayers(gameId, moveMessage);
+        try {
+            sendMessageToAllPlayers(gameId, moveMessage);
+        } catch (IOException e) {
+            log.error("HandleMessage. Had a problem sending message to everyone.");
+        }
         GameEndMessage endMessage = getGameEndMessage(updatedGame);
         if(endMessage != null){
-            sendMessageToAllPlayers(gameId, endMessage);
+            try {
+                sendMessageToAllPlayers(gameId, endMessage);
+            } catch (IOException e) {
+                log.error("HandleMessage. Had a problem sending message to everyone.", e);
+            }
         }
     }
 
@@ -115,12 +180,14 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
      */
     private static GameEndMessage getGameEndMessage(Game updatedGame) {
         GameEndMessage endMessage = null;
+        int whiteElo = updatedGame.getWhitePlayer().getElo();
+        int blackElo = updatedGame.getBlackPlayer().getElo();
         if(updatedGame.getGameState() == GameState.WHITE_WIN){
-            endMessage = new GameEndMessage(updatedGame.getGameState(), "White won");
+            endMessage = new GameEndMessage(updatedGame.getGameState(), "White won by checkmate", whiteElo, blackElo, updatedGame.getGameRepresentation().getId());
         } else if(updatedGame.getGameState() == GameState.BLACK_WIN){
-            endMessage = new GameEndMessage(updatedGame.getGameState(), "Black won");
+            endMessage = new GameEndMessage(updatedGame.getGameState(), "Black won by checkmate", whiteElo, blackElo, updatedGame.getGameRepresentation().getId());
         } else if(updatedGame.getGameState() == GameState.DRAW){
-            endMessage = new GameEndMessage(updatedGame.getGameState(), "Game ended in a draw");
+            endMessage = new GameEndMessage(updatedGame.getGameState(), "Game ended in a draw", whiteElo, blackElo,updatedGame.getGameRepresentation().getId());
         }
         return endMessage;
     }
@@ -153,12 +220,11 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
     /**
      * Handles the situation where a player want to resign.
      * @param currentGame - the relevant game
-     * @param messageJson - the concede message
+     * @param message - the concede message
      * @throws IOException - Thrown if there was a problem with sending a message of the result
      */
-    private void handleConcedeMessage(Game currentGame, String messageJson) throws IOException {
+    private void handleConcedeMessage(Game currentGame, ConcedeGameMessage message) throws IOException {
         //The game is considered aborted if it is in the first 2 turns, and doesn't lower your ELO.
-        Gson gson = new Gson();
         boolean isAborted = currentGame.getMoveList() == null || currentGame.getMoveList().size() < 2;
         String causeMessage;
         GameState gameResult;
@@ -168,9 +234,15 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             gameService.abortGame(currentGame.getWhitePlayer(), currentGame.getBlackPlayer(), currentGame);
         }
         else{
-            ConcedeGameMessage concedeGameMessage = gson.fromJson(messageJson, ConcedeGameMessage.class);
+            if (currentGame.getGameState() != GameState.ACTIVE &&
+                    currentGame.getGameState() != GameState.WAITING &&
+                    currentGame.getGameState() != GameState.WAITING_PRIVATE) {
+                log.info("Someone resigned, but game is already over");
+                return;
+            }
+            log.info("Someone resigned. his email is: " + message.getPlayerEmail() + " and the white email: " +currentGame.getWhitePlayer().getEmail());
             boolean didWhiteResign = Objects.equals(
-                    concedeGameMessage.getPlayerEmail(),
+                    message.getPlayerEmail(),
                     currentGame.getWhitePlayer().getEmail()
             );
             if(didWhiteResign){
@@ -182,7 +254,8 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             }
             gameService.onGameEnding(currentGame.getWhitePlayer(), currentGame.getBlackPlayer(), gameResult, currentGame);
         }
-        GameEndMessage endMessage = new GameEndMessage(gameResult, causeMessage);
+
+        GameEndMessage endMessage = new GameEndMessage(gameResult, causeMessage, currentGame.getWhitePlayer().getElo(), currentGame.getBlackPlayer().getElo(), currentGame.getGameRepresentation().getId());
         sendMessageToAllPlayers(currentGame.getId(), endMessage);
     }
     private void sendInvalidMoveMessage(WebSocketSession session){
@@ -198,11 +271,37 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, @NonNull CloseStatus status) {
+        //TODO: Upgrade the connection closed to consider it as a concede. we wont allow reconnects
+
         String gameId = extractGameId(Objects.requireNonNull(session.getUri()).getPath());
         if(gameId == null) return;
         Set<WebSocketSession> sessionsInGame = gameSessions.get(gameId);
         if(sessionsInGame == null) return;
         sessionsInGame.remove(session);
+        try{
+            Game game = gameService.getGameById(gameId);
+            GameState gameState = game.getGameState();
+            boolean gameDidntStart = gameState == GameState.NEW ||gameState == GameState.WAITING || gameState == GameState.WAITING_PRIVATE;
+            boolean isAborted = game.getMoveList() == null || game.getMoveList().size() < 2;
+            if(gameDidntStart || isAborted){
+                gameService.abortGame(game.getWhitePlayer(), game.getBlackPlayer(), game);
+
+                sendMessageToAllPlayers(game.getId(), new GameEndMessage(GameState.ABORTED, "Game was aborted", -1, -1, -1));
+                sessionEmailMap.remove(session);
+                return;
+            }
+            String playerEmail = sessionEmailMap.get(session);
+            if(playerEmail == null){
+                log.error("Couldn't find player to resign with (connection closed)");
+                return;
+            }
+            ConcedeGameMessage message =  new ConcedeGameMessage(playerEmail);
+            handleConcedeMessage(game, message);
+        } catch (IOException e){
+            sessionEmailMap.remove(session);
+            return;
+        }
+        sessionEmailMap.remove(session);
 
     }
 
@@ -226,12 +325,16 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    private void passTextMessageToAllPlayers(String gameId, TextMessage message) throws  IOException{
+    private void passTextMessageToAllPlayers(@NonNull WebSocketSession session, String gameId, TextMessage message) throws  IOException{
         Set<WebSocketSession> sessionsInGame = gameSessions.get(gameId);
         if(sessionsInGame == null) return;
         for (WebSocketSession s : sessionsInGame) {
-            s.sendMessage(message);
+            if (!s.equals(session)) {
+                s.sendMessage(message);
+            }
         }
     }
+
+
 
 }
