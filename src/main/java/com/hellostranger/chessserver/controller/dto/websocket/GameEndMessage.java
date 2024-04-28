@@ -12,12 +12,18 @@ import lombok.Setter;
 public class GameEndMessage extends Message {
     private String message;
     private GameState state;
+    private Integer whiteElo;
+    private Integer blackElo;
+    private Integer gameRepresentationId;
 
 
-    public GameEndMessage(GameState state, String message){
+    public GameEndMessage(GameState state, String message, int whiteElo, int blackElo, int gameRepresentationId){
         super(MessageType.END);
         this.state = state;
         this.message = message;
+        this.whiteElo = whiteElo;
+        this.blackElo = blackElo;
+        this.gameRepresentationId = gameRepresentationId;
     }
 
     @Override
@@ -25,11 +31,10 @@ public class GameEndMessage extends Message {
         return "GameEndMessage{" +
                 "state=" + state +
                 ", messageType=" + messageType +
+                ", whiteElo=" + whiteElo +
+                ", blackElo=" + blackElo +
+                ", gameRepresentationId=" + gameRepresentationId +
                 '}';
-    }
-
-    public void setState(GameState state) {
-        this.state = state;
     }
 
 }

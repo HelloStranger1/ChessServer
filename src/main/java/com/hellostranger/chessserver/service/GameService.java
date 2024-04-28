@@ -45,28 +45,42 @@ public class GameService {
     public void removeGame(Game game){
         GameStorage.getInstance().removeGame(game);
     }
-    public Game createGame(){
+
+    public String createPrivateGame(){
+        Game game = createGame(GameState.WAITING_PRIVATE);
+        return GameStorage.getInstance().generateShortCode(game);
+
+    }
+    public Game createGame(GameState state){
         Game game = new Game();
         Board board = new Board();
         board.setBoardWithStandardPieces();
         game.setId(UUID.randomUUID().toString());
         game.setBoard(board);
-        game.setGameState(GameState.NEW);
+        game.setGameState(state);
         GameStorage.getInstance().setGame(game);
 
         return game;
+    }
+    public Game joinPrivateGame(String playerEmail, String shortenedCode) throws GameFullException, GameNotFoundException {
+        String gameId = GameStorage.getInstance().matchCodeToId(shortenedCode);
+        if(Objects.equals(gameId, "")){
+            log.error("No game found!!!!!");
+            return null;
+        }
+        return joinGame(gameId, playerEmail);
     }
     public Game joinRandomGame(String playerEmail) throws GameFullException, GameNotFoundException, NoOpenGameException {
         Map<String, Game> games = GameStorage.getInstance().getGames();
         for(String gameId : games.keySet()){
             Game game = games.get(gameId);
-            if(game.getGameState() == GameState.NEW || game.getGameState() == GameState.WAITING){
+            if(game.getGameState() == GameState.WAITING){
                 return joinGame(gameId, playerEmail);
             }
         }
 
         //no open games
-        Game newGame = createGame();
+        Game newGame = createGame(GameState.WAITING);
         return joinGame(newGame.getId(), playerEmail);
     }
     public Game joinGame(String gameId, String playerEmail) throws GameNotFoundException, GameFullException {
@@ -111,7 +125,7 @@ public class GameService {
             game.setIsP1turn(true);
         }
 
-        if(game.getWhitePlayer() != null && game.getBlackPlayer() != null){
+        if(game.getWhitePlayer() != null && game.getBlackPlayer() != null) {
             game.setGameState(GameState.ACTIVE);
 
             GameRepresentation gameRepresentation = new GameRepresentation();
@@ -124,14 +138,12 @@ public class GameService {
             gameRepresentationRepository.save(gameRepresentation);
             game.setGameRepresentation(gameRepresentation);
 
-        } else{
-            game.setGameState(GameState.WAITING);
         }
-
         log.info("Game players: p1 " + game.getWhitePlayer() + " p2: " + game.getBlackPlayer());
         return game;
 
     }
+
 
     public Game makeMove(String gameId,MoveMessage moveMessage)
             throws InvalidMoveException, GameFinishedException, SquareNotFoundException, GameNotFoundException {
@@ -147,6 +159,7 @@ public class GameService {
         if (game.getGameState() != GameState.ACTIVE) {
             throw new GameFinishedException("The game has already finished.");
         }
+
 
         User user = getPlayer(game, playerEmail);
         if (user == null) {
@@ -165,6 +178,11 @@ public class GameService {
             throw new InvalidMoveException("Piece at that square is not yours. the piece is: " + startSquare.getPiece() + "and your color is: " + isUserWhite);
         }
 
+        if (isUserWhite) {
+            game.setIsDrawOfferedByBlack(false);
+        } else {
+            game.setIsDrawOfferedByWhite(false);
+        }
         if (board.isValidMove(startSquare, endSquare)) {
             log.info("GameService, move is legal");
             if(moveMessage.getMoveType() == MoveType.CASTLE){
@@ -179,6 +197,7 @@ public class GameService {
                     case PROMOTION_KNIGHT -> PieceType.KNIGHT;
                     case PROMOTION_BISHOP -> PieceType.BISHOP;
                 };
+                assert promotionType != null;
                 board.promotePawnAt(endSquare, promotionType);
                 log.info("After promotion board is: " + board.toStringPretty());
             }
@@ -198,11 +217,11 @@ public class GameService {
             //black just played a move, increasing the full move count.
             game.setFullMoves(game.getFullMoves() + 1);
         }
+        game.addMove(new Move(moveMessage));
         game.setHalfMoves(game.getHalfMoves() + 1);
         GameState state = checkGameState(game);
         game.setGameState(state);
 
-        game.addMove(new Move(moveMessage));
         MoveRepresentation moveRepresentation = MoveRepresentation
                 .builder()
                 .startCol(startCol)
@@ -272,43 +291,52 @@ public class GameService {
         if(game.getIsP1turn()){
             //black just played his move. check if white king is in check:
             if(board.isKingInCheck(true)){
-                if(!board.canPlayerPlay(Color.WHITE)){
+                if(!board.canPlayerPlay(Color.WHITE)) {
                     //black has been checkmated
                     return GameState.BLACK_WIN;
-                }else{
-                    return GameState.ACTIVE;
                 }
             }else{
                 if(!board.canPlayerPlay(Color.WHITE)){
                     return GameState.DRAW;
-                }else{
-                    return GameState.ACTIVE;
                 }
             }
         }else{
             //white just played
             if(board.isKingInCheck(false)){
-                if(!board.canPlayerPlay(Color.BLACK)){
+                if(!board.canPlayerPlay(Color.BLACK)) {
                     //black has been checkmated
                     return GameState.WHITE_WIN;
-                }else{
-                    return GameState.ACTIVE;
                 }
             }else{
-                if(!board.canPlayerPlay(Color.BLACK)){
+                if(!board.canPlayerPlay(Color.BLACK)) {
                     return GameState.DRAW;
-                }else{
-                    return GameState.ACTIVE;
                 }
             }
         }
+        if (checkForRepetition(game)) {
+            return GameState.DRAW;
+        }
+        return GameState.ACTIVE;
     }
 
 
-    public Game getGameById(String gameId) throws GameNotFoundException {
+    public boolean checkForRepetition(Game game) {
+        String currentFen = game.convertGameToFEN();
+        boolean foundOne = false;
+        for (int i = game.getLastIrreversibleMove(); i < game.getMoveList().size(); i += 2) {
+            if (game.getBoardsFen().get(i).equals(currentFen)) {
+                if (foundOne) {
+                    return true;
+                }
+                foundOne = true;
+            }
+        }
+        return false;
+    }
+    public Game getGameById(String gameId) {
         Game game = GameStorage.getInstance().getGames().get(gameId);
         if (game == null) {
-            throw new GameNotFoundException("Game with ID " + gameId + " not found.");
+            log.error("No game exists with id: " + gameId);
         }
         return game;
     }
@@ -468,125 +496,6 @@ public class GameService {
         game.setHalfMoves(0);
         return game;
 
-    }
-    public String convertGameToFEN(Game game){
-        StringBuilder FEN = new StringBuilder();
-        int emptySquareCount = 0;
-        for(int row = 7; row >= 0; row--){
-            for(int col = 7; col >= 0; col --){
-                try{
-                    Square currentSquare = game.getBoard().getSquareAt(col, row);
-                    if(currentSquare.getPiece() != null){
-                        if(emptySquareCount != 0){
-                            FEN.append(emptySquareCount);
-                        }
-                        char pieceChar = getPieceChar(currentSquare.getPiece());
-                        FEN.append(pieceChar);
-                    }else{
-                        emptySquareCount++;
-                    }
-                } catch (SquareNotFoundException e){
-                    log.info("what happened. i dont even know" + e.getMsg());
-                }
-            }
-            FEN.append("/");
-        }
-        if(game.getIsP1turn()){
-            FEN.append(" w");
-        }else{
-            FEN.append(" b");
-        }
-
-        StringBuilder castleRepresentation = new StringBuilder();
-
-        try{
-            //white king side
-            if(game.getBoard().isCastlingMove(
-                    game.getBoard().getSquareAt(3, 0),
-                    game.getBoard().getSquareAt(7,0))
-            ) {
-                castleRepresentation.append("K");
-            }
-            //white queen side
-            if(game.getBoard().isCastlingMove(
-                    game.getBoard().getSquareAt(3, 0),
-                    game.getBoard().getSquareAt(1,0))
-            ) {
-                castleRepresentation.append("Q");
-            }
-
-            //black king side
-            if(game.getBoard().isCastlingMove(
-                    game.getBoard().getSquareAt(3, 7),
-                    game.getBoard().getSquareAt(7,7))
-            ) {
-                castleRepresentation.append("k");
-            }
-            //black queen side
-            if(game.getBoard().isCastlingMove(
-                    game.getBoard().getSquareAt(3, 7),
-                    game.getBoard().getSquareAt(1,7))
-            ) {
-                castleRepresentation.append("q");
-            }
-        } catch (SquareNotFoundException e){
-            log.info("i really have no idea what is wrong" + e.getMsg());
-        }
-        if(castleRepresentation.isEmpty()){
-            FEN.append(" -");
-        }else{
-            FEN.append(" ");
-            FEN.append(castleRepresentation);
-
-        }
-
-        //add "phantom pawn"
-        if(game.getBoard().getPhantomPawnSquare() != null){
-            int phantomCol = game.getBoard().getPhantomPawnSquare().getColIndex();
-            int phantomRow = game.getBoard().getPhantomPawnSquare().getRowIndex();
-            switch (phantomCol){
-                case 0 -> FEN.append(" a");
-                case 1 -> FEN.append(" b");
-                case 2 -> FEN.append(" c");
-                case 3 -> FEN.append(" d");
-                case 4 -> FEN.append(" e");
-                case 5 -> FEN.append(" f");
-                case 6 -> FEN.append(" g");
-                case 7 -> FEN.append(" h");
-            }
-            FEN.append(phantomRow+1);
-        }
-
-        String movesCount = " " +game.getHalfMoves() + " " + game.getFullMoves();
-        FEN.append(movesCount);
-        return FEN.toString();
-    }
-    /*
-        Converts a piece to the char representation of it. a white king -> K, a black knight -> n and etc
-     */
-    private char getPieceChar(Piece piece){
-        boolean isPieceWhite = piece.getColor() == Color.WHITE;
-        switch (piece.getPieceType()){
-            case KING -> {
-                if(isPieceWhite) return 'K'; else return 'k';
-            }
-            case QUEEN -> {
-                        if(isPieceWhite) return 'Q'; else return 'q';
-            }
-            case ROOK -> {
-                if(isPieceWhite) return 'R'; else return 'r';
-            }
-            case BISHOP -> {
-                if(isPieceWhite) return 'B'; else return 'b';
-            }
-            case KNIGHT -> {
-                if(isPieceWhite) return 'N'; else return 'n';
-            }
-            case PAWN -> {
-                if(isPieceWhite) return 'P'; else return 'p';
-            }
-        }
-        return '\0';
     }
 
 

@@ -14,4 +14,5 @@ public interface GameRepresentationRepository extends JpaRepository<GameRepresen
     Optional<List<GameRepresentation>> findByBlackPlayerOrderByDateDesc(User blackUser);
 
     Optional<List<GameRepresentation>> findByWhitePlayerOrBlackPlayerOrderByDateDesc(User whiteUser, User blackUser);
+
 }

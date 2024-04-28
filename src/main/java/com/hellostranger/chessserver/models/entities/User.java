@@ -9,6 +9,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 
 
@@ -29,7 +30,8 @@ public class User implements UserDetails {
 
     private String email;
 
-    private Boolean isActive = false;
+    @Builder.Default private LocalDateTime lastTimeActive = LocalDateTime.now();
+    @Builder.Default private Boolean isActive = false;
 
     @Builder.Default private Integer elo = 800;
 
@@ -84,6 +86,7 @@ public class User implements UserDetails {
         this.role = role;
         this.elo = 800;
         this.image = "";
+
 
     }
 

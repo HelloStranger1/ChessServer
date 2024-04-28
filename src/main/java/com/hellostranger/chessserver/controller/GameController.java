@@ -10,7 +10,9 @@ import com.hellostranger.chessserver.models.game.Game;
 import com.hellostranger.chessserver.service.GameService;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.mapping.Join;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.parameters.P;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -20,11 +22,26 @@ import org.springframework.web.bind.annotation.*;
 public class GameController {
     private final GameService gameService;
 
-    @PostMapping("/create")
-    public ResponseEntity<Game> createGame(){
-        Game newGame = gameService.createGame();
-        log.info("Game created. id: " + newGame.getId());
-        return ResponseEntity.ok(newGame);
+    @PostMapping("/create-private")
+    public ResponseEntity<String> createPrivateGame(){
+        String code = gameService.createPrivateGame();
+        return ResponseEntity.ok(code);
+    }
+
+    @PostMapping("/join/private/{shortenedId}")
+    public ResponseEntity<Game> joinPrivateGame(@PathVariable(name = "shortenedId") String shortenedId, @RequestBody JoinRequest request){
+        log.info("Request to join private. shortId: " + shortenedId + " By player: " + request.getPlayerEmail());
+        try{
+            Game joinedGame = gameService.joinPrivateGame(request.getPlayerEmail(), shortenedId);
+            log.info("Joined private");
+            return ResponseEntity.ok(joinedGame);
+        } catch (GameFullException e) {
+            log.info("Game full");
+            return null;
+        } catch (GameNotFoundException e) {
+            log.info("Game not found");
+            return null;
+        }
     }
 
     @PostMapping("/join/{gameId}")

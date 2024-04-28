@@ -3,9 +3,7 @@ package com.hellostranger.chessserver.models.game;
 import com.hellostranger.chessserver.exceptions.SquareNotFoundException;
 import com.hellostranger.chessserver.models.enums.Color;
 import com.hellostranger.chessserver.models.enums.PieceType;
-import com.hellostranger.chessserver.models.game.pieces.King;
-import com.hellostranger.chessserver.models.game.pieces.Piece;
-import com.hellostranger.chessserver.models.game.pieces.PieceFactory;
+import com.hellostranger.chessserver.models.game.pieces.*;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
@@ -62,7 +60,24 @@ public class Board {
     }
 
     public void promotePawnAt(Square pawnSquare, PieceType promotionType){
-        pawnSquare.getPiece().setPieceType(promotionType);
+        Piece newPiece = null;
+        Piece oldPawn = pawnSquare.getPiece();
+        switch (promotionType) {
+            case QUEEN -> {
+                newPiece = new Queen(oldPawn.getColor(), pawnSquare, true);
+            }
+            case ROOK -> {
+                newPiece = new Rook(oldPawn.getColor(), pawnSquare, true);
+            } case BISHOP -> {
+                newPiece = new Bishop(oldPawn.getColor(), pawnSquare, true);
+            } case KNIGHT -> {
+                newPiece = new Knight(oldPawn.getColor(), pawnSquare, true);
+            }
+            case PAWN, KING -> {
+                log.error("can't promote pawn to a pawn/King");
+            }
+        }
+        pawnSquare.setPiece(newPiece);
     }
 
 
@@ -125,6 +140,28 @@ public class Board {
             } else if(end.getColIndex() < start.getColIndex() && !isValidMove(start, squaresArray[start.getRowIndex()][start.getColIndex() - 1])) {
                 //O-O-O
                 return false;
+            }
+            // We check the path is clear
+            int row = start.getRowIndex();
+            int col = start.getColIndex();
+            if (end.getColIndex() > col) {
+                // O-O
+                while (col < 7) {
+                    if (squaresArray[row][col].getPiece() != null) {
+                        log.info("King can't castle because we have a piece on (row, col) [" + row + "][" + col + "]. The piece is: " + squaresArray[row][col].getPiece());
+                        return false;
+                    }
+                    col++;
+                }
+            } else {
+                // O-O-O
+                while (col > 0) {
+                    if (squaresArray[row][col].getPiece() != null) {
+                        log.info("King can't castle because we have a piece on (row, col) [" + row + "][" + col + "]. The piece is: " + squaresArray[row][col].getPiece());
+                        return false;
+                    }
+                    col--;
+                }
             }
             makeCastlingMove(start, end);
         }else{

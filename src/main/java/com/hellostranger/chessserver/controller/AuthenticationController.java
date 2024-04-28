@@ -26,13 +26,11 @@ public class AuthenticationController {
 
     private final AuthenticationService authService;
     @PostMapping("/register")
-    public ResponseEntity<?> register(
-            @RequestBody RegisterRequest request
-    ){
+    public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
         try{
             return ResponseEntity.ok(authService.register(request));
         }catch (RuntimeException e){
-            log.info("User already exists. e: " + e.getMessage());
+            log.error("User already exists. e: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
         }
 
@@ -42,6 +40,7 @@ public class AuthenticationController {
             HttpServletRequest request,
             HttpServletResponse response
     ) throws IOException {
+
         authService.refreshToken(request, response);
     }
     @PostMapping("/authenticate")

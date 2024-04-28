@@ -1,7 +1,10 @@
 package com.hellostranger.chessserver.controller.dto;
 
+import com.hellostranger.chessserver.models.entities.GameRepresentation;
+import com.hellostranger.chessserver.models.entities.User;
 import com.hellostranger.chessserver.models.enums.Color;
 import com.hellostranger.chessserver.models.enums.GameState;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
@@ -12,6 +15,7 @@ import java.time.LocalDate;
 @Getter
 @Setter
 @Builder
+@AllArgsConstructor
 public class GameHistoryResponse {
     private Integer id;
     private String whiteImage;
@@ -26,5 +30,19 @@ public class GameHistoryResponse {
     private String startBoardJson;
     private String gameMoves;
 
+    public GameHistoryResponse(GameRepresentation gameRepresentation, User white, User black, Color opponentColor, String gameMoves) {
+        this.id = gameRepresentation.getId();
+        this.whiteImage = white.getImage();
+        this.blackImage = black.getImage();
+        this.whiteName = white.getName();
+        this.blackName = black.getName();
+        this.whiteElo = white.getElo();
+        this.blackElo = black.getElo();
+        this.gameDate = gameRepresentation.getDate();
+        this.opponentColor = opponentColor;
+        this.result = gameRepresentation.getResult();
+        this.startBoardJson = gameRepresentation.getStartBoardJson();
+        this.gameMoves = gameMoves;
+    }
 
 }
