@@ -60,6 +60,7 @@ public class User implements UserDetails {
 
     @JsonIgnore
     @OneToMany(mappedBy = "sender")
+    @Builder.Default
     private List<FriendRequest> sentFriendRequests = new ArrayList<>();
 
     @JsonIgnore
@@ -69,7 +70,7 @@ public class User implements UserDetails {
             joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "friend_id")
     )
-    private List<User> friends = new ArrayList<>();
+    @Builder.Default private List<User> friends = new ArrayList<>();
 
     @JsonIgnore
     @Enumerated(EnumType.STRING)

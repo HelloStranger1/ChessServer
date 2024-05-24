@@ -1,6 +1,6 @@
 package com.hellostranger.chessserver.models.entities;
 
-import com.hellostranger.chessserver.models.enums.GameState;
+import com.hellostranger.chessserver.core.GameResult;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -29,12 +29,11 @@ public class GameRepresentation {
     private User blackPlayer;
 
     @Enumerated(EnumType.STRING)
-    private GameState result;
+    private GameResult result;
 
     private LocalDate date = LocalDate.now();
 
-    @Column(columnDefinition = "TEXT")
-    private String startBoardJson;
+    private String startBoardFen;
 
     @OneToMany(/*mappedBy = "game", */fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @JoinColumn(name = "game_representation_id")

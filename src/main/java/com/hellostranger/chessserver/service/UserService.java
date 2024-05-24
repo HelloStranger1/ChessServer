@@ -1,24 +1,21 @@
 package com.hellostranger.chessserver.service;
 
 import com.hellostranger.chessserver.controller.dto.GameHistoryResponse;
+import com.hellostranger.chessserver.core.board.Board;
 import com.hellostranger.chessserver.models.entities.MoveRepresentation;
 import com.hellostranger.chessserver.models.entities.GameRepresentation;
 import com.hellostranger.chessserver.models.entities.User;
-import com.hellostranger.chessserver.models.enums.Color;
 import com.hellostranger.chessserver.storage.GameRepresentationRepository;
 import com.hellostranger.chessserver.storage.UserRepository;
 import lombok.NonNull;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.Collections.reverse;
 
@@ -102,20 +99,21 @@ public class UserService {
     private GameHistoryResponse getResponseFromRepresentation(GameRepresentation representation, User user) {
         User blackPlayer = representation.getBlackPlayer();
         User whitePlayer = representation.getWhitePlayer();
-        Color opponentColor;
+        int opponentColorIndex;
         if (whitePlayer == user) {
-            opponentColor = Color.BLACK;
+            opponentColorIndex = Board.blackIndex;
         } else {
-            opponentColor = Color.WHITE;
+            opponentColorIndex = Board.whiteIndex;
         }
         StringBuilder gameMoves = new StringBuilder();
 
         for (MoveRepresentation move : representation.getMoveRepresentations()) {
             gameMoves.append(move.toString());
+            gameMoves.append(',');
         }
 
         return new GameHistoryResponse(representation,
-                        whitePlayer, blackPlayer, opponentColor, gameMoves.toString());
+                        whitePlayer, blackPlayer, opponentColorIndex, gameMoves.toString());
     }
 
 

@@ -1,19 +1,18 @@
 package com.hellostranger.chessserver.service;
 
-import com.google.gson.Gson;
 import com.hellostranger.chessserver.controller.dto.websocket.MoveMessage;
+import com.hellostranger.chessserver.core.Arbiter;
+import com.hellostranger.chessserver.core.GameResult;
+import com.hellostranger.chessserver.core.board.Board;
+import com.hellostranger.chessserver.core.board.Move;
+import com.hellostranger.chessserver.core.board.Piece;
+import com.hellostranger.chessserver.core.helpers.FenUtility;
+import com.hellostranger.chessserver.core.helpers.MoveUtility;
 import com.hellostranger.chessserver.exceptions.*;
 import com.hellostranger.chessserver.models.entities.MoveRepresentation;
 import com.hellostranger.chessserver.models.entities.GameRepresentation;
-import com.hellostranger.chessserver.models.enums.Color;
-import com.hellostranger.chessserver.models.enums.GameState;
-import com.hellostranger.chessserver.models.enums.MoveType;
-import com.hellostranger.chessserver.models.enums.PieceType;
 import com.hellostranger.chessserver.models.game.*;
 import com.hellostranger.chessserver.models.entities.User;
-import com.hellostranger.chessserver.models.game.pieces.King;
-import com.hellostranger.chessserver.models.game.pieces.Piece;
-import com.hellostranger.chessserver.models.game.pieces.PieceFactory;
 import com.hellostranger.chessserver.storage.MoveRepresentationRepository;
 import com.hellostranger.chessserver.storage.GameRepresentationRepository;
 import com.hellostranger.chessserver.storage.GameStorage;
@@ -47,14 +46,14 @@ public class GameService {
     }
 
     public String createPrivateGame(){
-        Game game = createGame(GameState.WAITING_PRIVATE);
+        Game game = createGame(GameResult.WaitingPrivate);
         return GameStorage.getInstance().generateShortCode(game);
 
     }
-    public Game createGame(GameState state){
+    public Game createGame(GameResult state){
         Game game = new Game();
-        Board board = new Board();
-        board.setBoardWithStandardPieces();
+        Board board = Board.createBoard();
+        board.loadStartPosition();
         game.setId(UUID.randomUUID().toString());
         game.setBoard(board);
         game.setGameState(state);
@@ -74,13 +73,13 @@ public class GameService {
         Map<String, Game> games = GameStorage.getInstance().getGames();
         for(String gameId : games.keySet()){
             Game game = games.get(gameId);
-            if(game.getGameState() == GameState.WAITING){
+            if(game.getGameState() == GameResult.Waiting){
                 return joinGame(gameId, playerEmail);
             }
         }
 
         //no open games
-        Game newGame = createGame(GameState.WAITING);
+        Game newGame = createGame(GameResult.Waiting);
         return joinGame(newGame.getId(), playerEmail);
     }
     public Game joinGame(String gameId, String playerEmail) throws GameNotFoundException, GameFullException {
@@ -121,18 +120,13 @@ public class GameService {
             game.setWaitingPlayer(user);
         }
 
-        if(game.getIsP1turn() == null){
-            game.setIsP1turn(true);
-        }
-
         if(game.getWhitePlayer() != null && game.getBlackPlayer() != null) {
-            game.setGameState(GameState.ACTIVE);
+            game.setGameState(GameResult.InProgress);
 
             GameRepresentation gameRepresentation = new GameRepresentation();
             gameRepresentation.setWhitePlayer(game.getWhitePlayer());
             gameRepresentation.setBlackPlayer(game.getBlackPlayer());
-            Gson gson = new Gson();
-            gameRepresentation.setStartBoardJson(gson.toJson(game.getBoard()));
+            gameRepresentation.setStartBoardFen(FenUtility.currentFen(game.getBoard(), true));
             log.info("board is " + game.getBoard());
 
             gameRepresentationRepository.save(gameRepresentation);
@@ -151,12 +145,11 @@ public class GameService {
         Game game = getGameById(gameId);
         Board board = game.getBoard();
         String playerEmail = moveMessage.getPlayerEmail();
-        int startCol = moveMessage.getStartCol(), startRow = moveMessage.getStartRow();
-        int endCol = moveMessage.getEndCol(), endRow = moveMessage.getEndRow();
+        Move move = new Move(moveMessage.getMove());
 
         boolean isUserWhite = Objects.equals(playerEmail, game.getWhitePlayer().getEmail());
 
-        if (game.getGameState() != GameState.ACTIVE) {
+        if (game.getGameState() != GameResult.InProgress) {
             throw new GameFinishedException("The game has already finished.");
         }
 
@@ -169,13 +162,15 @@ public class GameService {
             throw new InvalidMoveException("not your turn");
         }
 
-        Square startSquare = board.getSquareAt(startCol, startRow);
-        Square endSquare = board.getSquareAt(endCol, endRow);
+        int startSquareIndex = move.getStartSquare();
+        int targetSquareIndex = move.getTargetSquare();
+        int movingPiece = board.getSquare()[startSquareIndex];
 
-        if(startSquare.getPiece() == null ){
+        if (movingPiece == Piece.NONE){
             throw new InvalidMoveException("No piece at that square");
-        }else if( (startSquare.getPiece().getColor() == Color.WHITE) != isUserWhite){
-            throw new InvalidMoveException("Piece at that square is not yours. the piece is: " + startSquare.getPiece() + "and your color is: " + isUserWhite);
+        } else if (Piece.isWhite(movingPiece) != isUserWhite){
+            throw new InvalidMoveException("Piece at that square is not yours. The piece type is: "
+                    +Piece.getSymbol(movingPiece) + "And is the piece white? " + Piece.isWhite(movingPiece) + " While are you white? " + isUserWhite);
         }
 
         if (isUserWhite) {
@@ -183,81 +178,49 @@ public class GameService {
         } else {
             game.setIsDrawOfferedByWhite(false);
         }
-        if (board.isValidMove(startSquare, endSquare)) {
-            log.info("GameService, move is legal");
-            if(moveMessage.getMoveType() == MoveType.CASTLE){
-                board.makeCastlingMove(startSquare, endSquare);
-            }else if(moveMessage.getMoveType() != MoveType.REGULAR){
-                game.setHalfMoves(-1);
-                board.movePiece(startSquare, endSquare);
-                PieceType promotionType = switch (moveMessage.getMoveType()){
-                    case REGULAR, CASTLE -> null;
-                    case PROMOTION_QUEEN -> PieceType.QUEEN;
-                    case PROMOTION_ROOK -> PieceType.ROOK;
-                    case PROMOTION_KNIGHT -> PieceType.KNIGHT;
-                    case PROMOTION_BISHOP -> PieceType.BISHOP;
-                };
-                assert promotionType != null;
-                board.promotePawnAt(endSquare, promotionType);
-                log.info("After promotion board is: " + board.toStringPretty());
-            }
-            else{
-                if(startSquare.getPiece().getPieceType() == PieceType.PAWN ||
-                        (endSquare.getPiece() != null && startSquare.getPiece().getColor() != endSquare.getPiece().getColor())
-                ){
-                    game.setHalfMoves(-1);
-                }
-                board.movePiece(startSquare, endSquare);
-            }
-        }else{
-            throw new InvalidMoveException("Move is not legal");
-        }
-        game.setIsP1turn(!game.getIsP1turn());
-        if(game.getIsP1turn()){
-            //black just played a move, increasing the full move count.
-            game.setFullMoves(game.getFullMoves() + 1);
-        }
-        game.addMove(new Move(moveMessage));
-        game.setHalfMoves(game.getHalfMoves() + 1);
-        GameState state = checkGameState(game);
-        game.setGameState(state);
 
-        MoveRepresentation moveRepresentation = MoveRepresentation
-                .builder()
-                .startCol(startCol)
-                .endCol(endCol)
-                .startRow(startRow)
-                .endRow(endRow)
-                .moveType(moveMessage.getMoveType())
-                .build();
+        if (!validateMove(game, move)) {
+            throw new InvalidMoveException("Move is not legal. move in UCE is: " + MoveUtility.getMoveNameUCI(move));
+        }
+        log.info("GameService, move is legal");
+        board.makeMove(move, false);
+
+        GameResult state = Arbiter.getGameState(board);
+        game.setGameState(state);
+        MoveRepresentation moveRepresentation = new MoveRepresentation();
+        moveRepresentation.setMove(MoveUtility.getMoveNameUCI(move));
         game.getGameRepresentation().addMoveRepresentation(moveRepresentation);
         moveRepresentationRepository.save(moveRepresentation);
 
-        if(game.getGameState() == GameState.WHITE_WIN || game.getGameState() == GameState.BLACK_WIN || game.getGameState() == GameState.DRAW){
-            onGameEnding(game.getWhitePlayer(), game.getBlackPlayer(), game.getGameState(), game);
+        if (Arbiter.isWinResult(state) || Arbiter.isDrawResult(state)) {
+            onGameEnding(game.getWhitePlayer(), game.getBlackPlayer(), state, game);
         }
+        game.addFenToList(FenUtility.currentFen(board, true));
         log.info("makeMove, game: " + game );
         return game;
     }
 
-    public void onGameEnding(User whitePlayer, User blackPlayer, GameState gameResult,Game game){
+    public void onGameEnding(User whitePlayer, User blackPlayer, GameResult gameResult,Game game){
+        game.setGameState(gameResult);
         GameRepresentation gameRepresentation = game.getGameRepresentation();
         gameRepresentation.setResult(gameResult);
-        whitePlayer.addGameToWhiteGameHistory(gameRepresentation);
-        blackPlayer.addGameToBlackGameHistory(gameRepresentation);
-        whitePlayer.setTotalGames(game.getWhitePlayer().getTotalGames() + 1);
-        blackPlayer.setTotalGames(game.getBlackPlayer().getTotalGames() + 1);
-        if(gameResult == GameState.WHITE_WIN){
+        if (gameResult != GameResult.Aborted) {
+            whitePlayer.addGameToWhiteGameHistory(gameRepresentation);
+            blackPlayer.addGameToBlackGameHistory(gameRepresentation);
+            whitePlayer.setTotalGames(game.getWhitePlayer().getTotalGames() + 1);
+            blackPlayer.setTotalGames(game.getBlackPlayer().getTotalGames() + 1);
+        }
+        if(Arbiter.isWhiteWinResult(gameResult)){
             whitePlayer.setElo(EloCalculator.calculateEloAfterWin(whitePlayer.getElo(), blackPlayer.getElo()));
             blackPlayer.setElo(EloCalculator.calculateEloAfterLoss(blackPlayer.getElo(), whitePlayer.getElo()));
             whitePlayer.setGamesWon(whitePlayer.getGamesWon() + 1);
             blackPlayer.setGamesLost(blackPlayer.getGamesLost() + 1);
-        } else if(gameResult == GameState.BLACK_WIN){
+        } else if(Arbiter.isBlackWinResult(gameResult)){
             whitePlayer.setElo(EloCalculator.calculateEloAfterLoss(whitePlayer.getElo(), blackPlayer.getElo()));
             blackPlayer.setElo(EloCalculator.calculateEloAfterWin(blackPlayer.getElo(), whitePlayer.getElo()));
             blackPlayer.setGamesWon(blackPlayer.getGamesWon() + 1);
             whitePlayer.setGamesLost(whitePlayer.getGamesLost() + 1);
-        } else if (gameResult == GameState.DRAW) {
+        } else if (Arbiter.isDrawResult(gameResult)) {
             whitePlayer.setElo(EloCalculator.calculateEloAfterDraw(whitePlayer.getElo(), blackPlayer.getElo()));
             blackPlayer.setElo(EloCalculator.calculateEloAfterDraw(blackPlayer.getElo(), whitePlayer.getElo()));
             whitePlayer.setGamesDrawn(whitePlayer.getGamesDrawn() + 1);
@@ -267,6 +230,16 @@ public class GameService {
         userRepository.save(whitePlayer);
         userRepository.save(blackPlayer);
 
+    }
+
+    private boolean validateMove(Game game, Move move) {
+        Move[] legalMoves = game.moveGenerator.generateMoves(game.getBoard(), false);
+        for (Move legalMove : legalMoves) {
+            if (Move.sameMove(legalMove, move)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void abortGame(User whitePlayer, User blackPlayer, Game game){
@@ -283,56 +256,7 @@ public class GameService {
         }
         GameStorage.getInstance().removeGame(game);
     }
-    private GameState checkGameState(Game game){
-        if(game.getHalfMoves() >= 100){
-            return GameState.DRAW;
-        }
-        Board board = game.getBoard();
-        if(game.getIsP1turn()){
-            //black just played his move. check if white king is in check:
-            if(board.isKingInCheck(true)){
-                if(!board.canPlayerPlay(Color.WHITE)) {
-                    //black has been checkmated
-                    return GameState.BLACK_WIN;
-                }
-            }else{
-                if(!board.canPlayerPlay(Color.WHITE)){
-                    return GameState.DRAW;
-                }
-            }
-        }else{
-            //white just played
-            if(board.isKingInCheck(false)){
-                if(!board.canPlayerPlay(Color.BLACK)) {
-                    //black has been checkmated
-                    return GameState.WHITE_WIN;
-                }
-            }else{
-                if(!board.canPlayerPlay(Color.BLACK)) {
-                    return GameState.DRAW;
-                }
-            }
-        }
-        if (checkForRepetition(game)) {
-            return GameState.DRAW;
-        }
-        return GameState.ACTIVE;
-    }
 
-
-    public boolean checkForRepetition(Game game) {
-        String currentFen = game.convertGameToFEN();
-        boolean foundOne = false;
-        for (int i = game.getLastIrreversibleMove(); i < game.getMoveList().size(); i += 2) {
-            if (game.getBoardsFen().get(i).equals(currentFen)) {
-                if (foundOne) {
-                    return true;
-                }
-                foundOne = true;
-            }
-        }
-        return false;
-    }
     public Game getGameById(String gameId) {
         Game game = GameStorage.getInstance().getGames().get(gameId);
         if (game == null) {
@@ -342,11 +266,7 @@ public class GameService {
     }
 
     private boolean checkIfIsPlayersTurn(Game game, User player){
-        if(Objects.equals(game.getWhitePlayer().getEmail(), player.getEmail())){
-            return game.getIsP1turn();
-        } else{
-            return !game.getIsP1turn();
-        }
+        return (player.getEmail().equals(game.getWhitePlayer().getEmail())) == game.getBoard().isWhiteToMove();
     }
 
     private User getPlayer(Game game, String playerEmail) {
@@ -358,145 +278,7 @@ public class GameService {
         return null;
     }
 
-    public MoveMessage[] convertCastleToMoves(MoveMessage moveMessage){
-        //assumes the moveMessage is for castling
-        MoveMessage kingMove, rookMove;
-        if(moveMessage.getEndCol() > moveMessage.getStartCol()){
-            //O-O
-            kingMove = new MoveMessage(moveMessage.getPlayerEmail(), moveMessage.getStartCol(), moveMessage.getStartRow(), moveMessage.getStartCol() + 2, moveMessage.getEndRow());
-            rookMove = new MoveMessage(moveMessage.getPlayerEmail(), moveMessage.getEndCol(), moveMessage.getEndRow(), moveMessage.getEndCol() - 2, moveMessage.getEndRow());
-        }else{
-            //O-O-O
-            kingMove = new MoveMessage(moveMessage.getPlayerEmail(), moveMessage.getStartCol(), moveMessage.getStartRow(), moveMessage.getStartCol() - 2, moveMessage.getEndRow());
-            rookMove = new MoveMessage(moveMessage.getPlayerEmail(), moveMessage.getEndCol(), moveMessage.getEndRow(), moveMessage.getEndCol() + 3, moveMessage.getEndRow());
-        }
-        MoveMessage[] moves = new MoveMessage[2];
-        moves[0] = kingMove;
-        moves[1] = rookMove;
-        return moves;
 
-    }
-
-
-    public Game convertFENToGame(String fen) throws SquareNotFoundException {
-        PieceFactory pieceFactory = new PieceFactory();
-        Game game = new Game();
-        game.setId(UUID.randomUUID().toString());
-        Board board = new Board();
-        game.setBoard(board);
-        int col = 0, row = 7;
-        while(row >= 0){
-            if(row == 0 && col == 8){
-                row--;
-                continue;
-            }
-            char currentChar = fen.charAt(0);
-            fen = fen.substring(1);
-            if(currentChar == '/'){
-                row--;
-                col = 0;
-                continue;
-            }
-            if(currentChar == ' '){
-                continue;
-            }
-            try{
-                col += Integer.parseInt(String.valueOf(currentChar));
-                continue;
-            } catch (NumberFormatException ignored) {}
-            //currentChar is a piece
-            Color pieceColor;
-            if(Character.isUpperCase(currentChar)){
-                pieceColor = Color.WHITE;
-            } else{
-                pieceColor = Color.BLACK;
-            }
-            PieceType pieceType = null;
-            boolean hasMoved = true;
-            switch (currentChar){
-                case 'Q', 'q' -> pieceType = PieceType.QUEEN;
-                case 'R', 'r' -> pieceType = PieceType.ROOK;
-                case 'B', 'b' -> pieceType = PieceType.BISHOP;
-                case 'N', 'n' -> pieceType = PieceType.KNIGHT;
-                case 'K', 'k' -> pieceType = PieceType.KING;
-                case 'P', 'p' ->{
-                    pieceType = PieceType.PAWN;
-                    if( (pieceColor == Color.WHITE && row == 1) || (pieceColor == Color.BLACK && row == 6)){
-                        hasMoved = false;
-                    }
-                }
-                default -> log.error("\n convertFromFen failed since the char: " + currentChar +"  isn't actually a piece");
-
-            }
-            assert pieceType != null;
-            Piece curPiece = pieceFactory.getPiece(pieceType, pieceColor, board.getSquareAt(col, row), hasMoved);
-            if(curPiece.getPieceType() == PieceType.KING){
-                if(curPiece.getColor() == Color.WHITE){
-                    board.setWhiteKing((King) curPiece);
-                }
-                else {
-                    board.setBlackKing( (King) curPiece);
-                }
-            }
-            board.setPieceAt(col, row, curPiece);
-            col++;
-        }
-        //We should have finished all the pieces.
-        log.info("Fen left is: " + fen);
-        char curChar = fen.charAt(1);
-        fen = fen.substring(2);
-        game.setIsP1turn(curChar == 'w');
-        curChar = fen.charAt(1);
-        fen = fen.substring(2);
-        if(curChar != '-'){
-            while(curChar != ' '){
-                if(curChar == 'Q'){
-                    board.getSquareAt(4, 0).getPiece().setHasMoved(false); //White King
-                    board.getSquareAt(0, 0).getPiece().setHasMoved(false); //White Rook on a1
-                } else if(curChar == 'q'){
-                    board.getSquareAt(4, 7).getPiece().setHasMoved(false); //Black King
-                    board.getSquareAt(0, 7).getPiece().setHasMoved(false); //Black Rook on a8
-                } else if(curChar == 'K'){
-                    board.getSquareAt(4, 0).getPiece().setHasMoved(false); //White King
-                    board.getSquareAt(7, 0).getPiece().setHasMoved(false); //White Rook on h1
-                } else if(curChar == 'k'){
-                    board.getSquareAt(4, 7).getPiece().setHasMoved(false); //Black King
-                    board.getSquareAt(7, 7).getPiece().setHasMoved(false); //Black Rook on h8
-                }
-                curChar = fen.charAt(1);
-                fen = fen.substring(1);
-            }
-        }
-        //En-pasant
-        if(fen.charAt(1) == '-'){
-            board.setPhantomPawnSquare(null);
-            fen = fen.substring(3);
-        }else {
-            int phantomPawnCol = switch (fen.charAt(1)){
-                case 'a' -> 0;
-                case 'b' -> 1;
-                case 'c' -> 2;
-                case 'd' -> 3;
-                case 'e' -> 4;
-                case 'f' -> 5;
-                case 'g' -> 6;
-                case 'h' -> 7;
-                default -> -1;
-            };
-            if(phantomPawnCol == -1){
-                log.error("\n convertFromFen failed since the col: " + fen.charAt(1) +"  isn't a col in algebreic notation");
-            }
-            int phantomPawnRow = Integer.parseInt(String.valueOf(fen.charAt(2)));
-            board.setPhantomPawnSquare(board.getSquareAt(phantomPawnCol, phantomPawnRow));
-            fen = fen.substring(4);
-        }
-        //Only thing left is half-moves and full-moves.
-        //TODO: Convert the halfmoves/fullMoves as well so you could play a complete game from FEN
-        game.setFullMoves(0);
-        game.setHalfMoves(0);
-        return game;
-
-    }
 
 
 }

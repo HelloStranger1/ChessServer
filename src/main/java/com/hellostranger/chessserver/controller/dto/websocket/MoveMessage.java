@@ -1,7 +1,6 @@
 package com.hellostranger.chessserver.controller.dto.websocket;
 
 
-import com.hellostranger.chessserver.models.enums.MoveType;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -9,24 +8,17 @@ import lombok.Setter;
 @Setter
 public class MoveMessage extends Message {
     private String playerEmail;
-    private int startCol;
-    private int startRow;
-    private int endCol;
-    private int endRow;
-    private MoveType moveType;
+    private Integer move;
 
-    public MoveMessage(String playerEmail, int startCol, int startRow, int endCol, int endRow){
+    public MoveMessage(String playerEmail, Integer moveValue){
         super(MessageType.MOVE);
         this.playerEmail = playerEmail;
-        this.startCol = startCol;
-        this.startRow = startRow;
-        this.endCol = endCol;
-        this.endRow = endRow;
+        this.move = moveValue;
     }
 
     @Override
     public String toString() {
-        return "Move. name: " + playerEmail + "startCol " + startCol + "startRow" + startRow + "endCol" + endCol + "endRow" + endRow + "moveType: " + moveType;
+        return "Move. player: " + playerEmail + "moveValue: " + move;
     }
 
 }

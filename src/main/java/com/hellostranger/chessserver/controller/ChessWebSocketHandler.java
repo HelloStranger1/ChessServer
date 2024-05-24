@@ -3,14 +3,15 @@ package com.hellostranger.chessserver.controller;
 
 import com.google.gson.Gson;
 import com.hellostranger.chessserver.controller.dto.websocket.*;
+import com.hellostranger.chessserver.core.GameResult;
 import com.hellostranger.chessserver.exceptions.*;
-import com.hellostranger.chessserver.models.enums.GameState;
 import com.hellostranger.chessserver.models.game.Game;
 import com.hellostranger.chessserver.models.entities.User;
 import com.hellostranger.chessserver.service.GameService;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -52,7 +53,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        if (currentGame.getGameState() == GameState.ACTIVE) {
+        if (currentGame.getGameState() == GameResult.InProgress) {
             User whitePlayer = currentGame.getWhitePlayer();
             User blackPlayer = currentGame.getBlackPlayer();
             GameStartMessage startMessage = new GameStartMessage(whitePlayer, blackPlayer);
@@ -70,7 +71,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
      * @param message One of the possible Messages (Detailed in dto.websocket), in JSON.
      */
     @Override
-    protected void handleTextMessage(@NonNull WebSocketSession session, TextMessage message) {
+    protected void handleTextMessage(@NonNull WebSocketSession session, @NotNull TextMessage message) {
 
         //Extracting gameId and the message
         String gameId = extractGameId(Objects.requireNonNull(session.getUri()).getPath());
@@ -98,7 +99,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             try {
                 passTextMessageToAllPlayers(session, gameId, message);
             } catch (IOException e) {
-                log.error("handlemessage. had a problem sending message to everyone.");
+                log.error("handle message. had a problem sending message to everyone.");
             }
             log.info("I didn't think we would ever get this message since we are the ones sending it");
             return;
@@ -124,7 +125,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             try {
                 passTextMessageToAllPlayers(session, gameId,  message);
             } catch (IOException e) {
-                log.error("handlemessage. had a problem sending message to everyone.");
+                log.error("handle message. had a problem sending message to everyone.");
 
             }
             Game game = gameService.getGameById(gameId);
@@ -143,7 +144,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        if (currentGame.getGameState() != GameState.ACTIVE) {
+        if (currentGame.getGameState() != GameResult.InProgress) {
             log.error("Game isn't active. you can't play a move yet");
             return;
         }
@@ -158,7 +159,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         try {
-            sendMessageToAllPlayers(gameId, moveMessage);
+            passTextMessageToAllPlayers(session, gameId, message);
         } catch (IOException e) {
             log.error("HandleMessage. Had a problem sending message to everyone.");
         }
@@ -182,12 +183,24 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
         GameEndMessage endMessage = null;
         int whiteElo = updatedGame.getWhitePlayer().getElo();
         int blackElo = updatedGame.getBlackPlayer().getElo();
-        if(updatedGame.getGameState() == GameState.WHITE_WIN){
+        if(updatedGame.getGameState() == GameResult.BlackIsMated) {
             endMessage = new GameEndMessage(updatedGame.getGameState(), "White won by checkmate", whiteElo, blackElo, updatedGame.getGameRepresentation().getId());
-        } else if(updatedGame.getGameState() == GameState.BLACK_WIN){
+        } else if (updatedGame.getGameState() == GameResult.BlackResigned) {
+            endMessage = new GameEndMessage(updatedGame.getGameState(), "White won by resignation", whiteElo, blackElo, updatedGame.getGameRepresentation().getId());
+        } else if (updatedGame.getGameState() == GameResult.WhiteIsMated) {
             endMessage = new GameEndMessage(updatedGame.getGameState(), "Black won by checkmate", whiteElo, blackElo, updatedGame.getGameRepresentation().getId());
-        } else if(updatedGame.getGameState() == GameState.DRAW){
-            endMessage = new GameEndMessage(updatedGame.getGameState(), "Game ended in a draw", whiteElo, blackElo,updatedGame.getGameRepresentation().getId());
+        }else if (updatedGame.getGameState() == GameResult.WhiteResigned) {
+            endMessage = new GameEndMessage(updatedGame.getGameState(), "Black won by resignation", whiteElo, blackElo, updatedGame.getGameRepresentation().getId());
+        } else if (updatedGame.getGameState() == GameResult.DrawByAgreement) {
+            endMessage = new GameEndMessage(updatedGame.getGameState(), "Game ended in a draw by agreement", whiteElo, blackElo,updatedGame.getGameRepresentation().getId());
+        } else if(updatedGame.getGameState() == GameResult.FiftyMoveRule){
+            endMessage = new GameEndMessage(updatedGame.getGameState(), "Game ended in a draw by fifty move rule", whiteElo, blackElo,updatedGame.getGameRepresentation().getId());
+        } else if(updatedGame.getGameState() == GameResult.InsufficientMaterial) {
+            endMessage = new GameEndMessage(updatedGame.getGameState(), "Game ended in a draw due to insufficient material", whiteElo, blackElo, updatedGame.getGameRepresentation().getId());
+        } else if(updatedGame.getGameState() == GameResult.Repetition) {
+            endMessage = new GameEndMessage(updatedGame.getGameState(), "Game ended in a draw by repetition", whiteElo, blackElo,updatedGame.getGameRepresentation().getId());
+        } else if(updatedGame.getGameState() == GameResult.Stalemate) {
+            endMessage = new GameEndMessage(updatedGame.getGameState(), "Game ended in a draw by stalemate", whiteElo, blackElo,updatedGame.getGameRepresentation().getId());
         }
         return endMessage;
     }
@@ -225,18 +238,18 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
      */
     private void handleConcedeMessage(Game currentGame, ConcedeGameMessage message) throws IOException {
         //The game is considered aborted if it is in the first 2 turns, and doesn't lower your ELO.
-        boolean isAborted = currentGame.getMoveList() == null || currentGame.getMoveList().size() < 2;
+        boolean isAborted = currentGame.getBoard().getAllGameMoves().size() < 2;
         String causeMessage;
-        GameState gameResult;
+        GameResult gameResult;
         if(isAborted){
-            gameResult = GameState.ABORTED;
+            gameResult = GameResult.Aborted;
             causeMessage = "Game was aborted";
             gameService.abortGame(currentGame.getWhitePlayer(), currentGame.getBlackPlayer(), currentGame);
         }
         else{
-            if (currentGame.getGameState() != GameState.ACTIVE &&
-                    currentGame.getGameState() != GameState.WAITING &&
-                    currentGame.getGameState() != GameState.WAITING_PRIVATE) {
+            if (currentGame.getGameState() != GameResult.InProgress &&
+                    currentGame.getGameState() != GameResult.Waiting &&
+                    currentGame.getGameState() != GameResult.WaitingPrivate) {
                 log.info("Someone resigned, but game is already over");
                 return;
             }
@@ -247,10 +260,10 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             );
             if(didWhiteResign){
                 causeMessage = "Black won by resignation";
-                gameResult = GameState.BLACK_WIN;
+                gameResult = GameResult.WhiteResigned;
             }else{
                 causeMessage = "White won by resignation";
-                gameResult = GameState.WHITE_WIN;
+                gameResult = GameResult.BlackResigned;
             }
             gameService.onGameEnding(currentGame.getWhitePlayer(), currentGame.getBlackPlayer(), gameResult, currentGame);
         }
@@ -272,6 +285,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, @NonNull CloseStatus status) {
         //TODO: Upgrade the connection closed to consider it as a concede. we wont allow reconnects
+        log.error("Connection closed");
 
         String gameId = extractGameId(Objects.requireNonNull(session.getUri()).getPath());
         if(gameId == null) return;
@@ -280,13 +294,13 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
         sessionsInGame.remove(session);
         try{
             Game game = gameService.getGameById(gameId);
-            GameState gameState = game.getGameState();
-            boolean gameDidntStart = gameState == GameState.NEW ||gameState == GameState.WAITING || gameState == GameState.WAITING_PRIVATE;
-            boolean isAborted = game.getMoveList() == null || game.getMoveList().size() < 2;
+            GameResult gameState = game.getGameState();
+            boolean gameDidntStart = gameState == GameResult.NotStarted || gameState == GameResult.Waiting || gameState == GameResult.WaitingPrivate;
+            boolean isAborted = game.getBoard().getAllGameMoves().size() < 2;
             if(gameDidntStart || isAborted){
                 gameService.abortGame(game.getWhitePlayer(), game.getBlackPlayer(), game);
 
-                sendMessageToAllPlayers(game.getId(), new GameEndMessage(GameState.ABORTED, "Game was aborted", -1, -1, -1));
+                sendMessageToAllPlayers(game.getId(), new GameEndMessage(GameResult.Aborted, "Game was aborted", -1, -1, -1));
                 sessionEmailMap.remove(session);
                 return;
             }
@@ -299,6 +313,8 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             handleConcedeMessage(game, message);
         } catch (IOException e){
             sessionEmailMap.remove(session);
+            return;
+        } catch (NullPointerException e) {
             return;
         }
         sessionEmailMap.remove(session);

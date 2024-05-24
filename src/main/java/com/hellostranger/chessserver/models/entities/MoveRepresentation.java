@@ -1,7 +1,5 @@
 package com.hellostranger.chessserver.models.entities;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.hellostranger.chessserver.models.enums.MoveType;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -16,27 +14,13 @@ public class MoveRepresentation {
     @GeneratedValue
     private Integer id;
 
-    private int startCol;
-    private int startRow;
-    private int endCol;
-    private int endRow;
-    private MoveType moveType;
-
+    private String move;
 
     @Override
     public String toString(){
-        return "" + startCol + startRow + endCol + endRow + matchTypeToChar(moveType);
+        return move;
+
     }
 
-    private String matchTypeToChar(MoveType moveType){
-        return switch (moveType){
-            case REGULAR -> "0";
-            case CASTLE -> "C";
-            case PROMOTION_QUEEN -> "Q";
-            case PROMOTION_ROOK -> "R";
-            case PROMOTION_BISHOP -> "B";
-            case PROMOTION_KNIGHT -> "K";
-        };
-    }
 
 }

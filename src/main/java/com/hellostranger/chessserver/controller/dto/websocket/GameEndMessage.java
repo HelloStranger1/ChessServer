@@ -1,7 +1,7 @@
 package com.hellostranger.chessserver.controller.dto.websocket;
 
 
-import com.hellostranger.chessserver.models.enums.GameState;
+import com.hellostranger.chessserver.core.GameResult;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -11,13 +11,13 @@ import lombok.Setter;
 @Setter
 public class GameEndMessage extends Message {
     private String message;
-    private GameState state;
+    private GameResult state;
     private Integer whiteElo;
     private Integer blackElo;
     private Integer gameRepresentationId;
 
 
-    public GameEndMessage(GameState state, String message, int whiteElo, int blackElo, int gameRepresentationId){
+    public GameEndMessage(GameResult state, String message, int whiteElo, int blackElo, int gameRepresentationId){
         super(MessageType.END);
         this.state = state;
         this.message = message;

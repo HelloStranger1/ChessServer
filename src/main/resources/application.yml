@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/chess_database
+    url: jdbc:postgresql://localhost:5432/ChessApp
     username: postgres
     password: "*d6!zXVKU4Hmam"
     driver-class-name: org.postgresql.Driver
