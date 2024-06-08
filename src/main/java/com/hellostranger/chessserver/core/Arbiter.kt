@@ -69,6 +69,22 @@ object Arbiter {
         }
         return false
     }
+    @JvmStatic
+    fun getResultDescription(result: GameResult) : String {
+        return when (result) {
+            GameResult.DrawByArbiter -> "Draw by arbiter"
+            GameResult.FiftyMoveRule -> "Draw by fifty move rule"
+            GameResult.Repetition -> "Draw by repetition"
+            GameResult.Stalemate -> "Draw by stalemate"
+            GameResult.InsufficientMaterial -> "Draw due to insufficient material"
+            GameResult.DrawByAgreement -> "Draw by agreement"
+            GameResult.BlackResigned -> "White won by resignation"
+            GameResult.BlackIsMated -> "White won by checkmate"
+            GameResult.WhiteResigned -> "Black won by resignation"
+            GameResult.WhiteIsMated -> "Black won by checkmate"
+            else -> ""
+        }
+    }
 
 
     // Test for insufficient material (Note: not all cases are implemented)

@@ -35,7 +35,7 @@ public class GameRepresentation {
 
     private String startBoardFen;
 
-    @OneToMany(/*mappedBy = "game", */fetch = FetchType.EAGER, cascade = CascadeType.ALL)
+    @OneToMany(fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @JoinColumn(name = "game_representation_id")
     private List<MoveRepresentation> moveRepresentations;
 
@@ -47,7 +47,6 @@ public class GameRepresentation {
         this.moveRepresentations.add(moveRepresentation);
 
     }
-
 
     @Override
     public String toString(){

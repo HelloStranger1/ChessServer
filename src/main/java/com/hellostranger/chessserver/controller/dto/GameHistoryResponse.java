@@ -40,6 +40,7 @@ public class GameHistoryResponse {
         this.gameDate = gameRepresentation.getDate();
         this.opponentColorIndex = opponentColor;
         this.result = gameRepresentation.getResult();
+        this.startBoardFen = gameRepresentation.getStartBoardFen();
         this.gameMoves = gameMoves;
     }
 

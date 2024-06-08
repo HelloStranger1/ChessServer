@@ -75,29 +75,5 @@ public class FriendRequestService {
         userRepository.save(user);
 
     }
-    public void acceptFriendRequest(String userEmail, Integer requestId) {
-        User user = userRepository.findByEmail(userEmail).orElse(null);
-        if (user == null) {
-            throw new IllegalArgumentException("User not found.");
-        }
-
-        FriendRequest friendRequest = friendRequestRepository.findById(requestId).orElse(null);
-        if (friendRequest == null) {
-            throw new IllegalArgumentException("Friend request not found.");
-        }
-
-        if (!friendRequest.getRecipient().equals(user)) {
-            throw new IllegalArgumentException("You cannot accept this friend request.");
-        }
-
-        friendRequest.setStatus(RequestStatus.ACCEPTED);
-        friendRequestRepository.save(friendRequest);
-
-        User sender = friendRequest.getSender();
-        user.getFriends().add(sender);
-        sender.getFriends().add(user);
-        userRepository.save(user);
-        userRepository.save(sender);
-    }
 }
 

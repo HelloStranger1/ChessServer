@@ -2,6 +2,7 @@ package com.hellostranger.chessserver.service;
 
 import com.hellostranger.chessserver.controller.dto.websocket.MoveMessage;
 import com.hellostranger.chessserver.core.Arbiter;
+import com.hellostranger.chessserver.core.EloCalculator;
 import com.hellostranger.chessserver.core.GameResult;
 import com.hellostranger.chessserver.core.board.Board;
 import com.hellostranger.chessserver.core.board.Move;
@@ -41,10 +42,6 @@ public class GameService {
     @Autowired
     private final MoveRepresentationRepository moveRepresentationRepository;
 
-    public void removeGame(Game game){
-        GameStorage.getInstance().removeGame(game);
-    }
-
     public String createPrivateGame(){
         Game game = createGame(GameResult.WaitingPrivate);
         return GameStorage.getInstance().generateShortCode(game);
@@ -65,11 +62,11 @@ public class GameService {
         String gameId = GameStorage.getInstance().matchCodeToId(shortenedCode);
         if(Objects.equals(gameId, "")){
             log.error("No game found!!!!!");
-            return null;
+            throw new GameNotFoundException("No game found!!!!!");
         }
         return joinGame(gameId, playerEmail);
     }
-    public Game joinRandomGame(String playerEmail) throws GameFullException, GameNotFoundException, NoOpenGameException {
+    public Game joinRandomGame(String playerEmail) throws GameFullException {
         Map<String, Game> games = GameStorage.getInstance().getGames();
         for(String gameId : games.keySet()){
             Game game = games.get(gameId);
@@ -77,16 +74,15 @@ public class GameService {
                 return joinGame(gameId, playerEmail);
             }
         }
-
         //no open games
         Game newGame = createGame(GameResult.Waiting);
         return joinGame(newGame.getId(), playerEmail);
     }
-    public Game joinGame(String gameId, String playerEmail) throws GameNotFoundException, GameFullException {
+    public Game joinGame(String gameId, String playerEmail) throws GameFullException {
         Game game = getGameById(gameId);
         User user = userRepository.findByEmail(playerEmail)
                 .orElseThrow();
-        log.info("Join game, game is: " + game + "player email is: " + playerEmail +" player is: " + user);
+        log.info("Join game, game is: {}player email is: {} player is: {}", game, playerEmail, user);
         if (game.getWhitePlayer() != null && game.getBlackPlayer() != null) {
             throw new GameFullException("The game is already full.");
         }
@@ -98,20 +94,10 @@ public class GameService {
 
             if(isWaitingPlayerWhite){
                 game.setWhitePlayer(game.getWaitingPlayer());
-
                 game.setBlackPlayer(user);
-
-                log.info("user of newGamePlayer is: " + user + "and users whiteGameHistory is: " + user.getWhiteGamesHistory() + "and the black: " + user.getBlackGamesHistory());
-
-                /*game.setBlackPlayer(newGamePlayer);*/
             }else{
                 game.setBlackPlayer(game.getWaitingPlayer());
-
                 game.setWhitePlayer(user);
-
-                log.info("user of newGamePlayer is: " + user + "and users whiteGameHistory is: " + user.getWhiteGamesHistory() + "and the black: " + user.getBlackGamesHistory());
-
-
             }
             //since we have 2 players, we reset waitingPlayer to null
             game.setWaitingPlayer(null);
@@ -127,20 +113,20 @@ public class GameService {
             gameRepresentation.setWhitePlayer(game.getWhitePlayer());
             gameRepresentation.setBlackPlayer(game.getBlackPlayer());
             gameRepresentation.setStartBoardFen(FenUtility.currentFen(game.getBoard(), true));
-            log.info("board is " + game.getBoard());
+            log.info("board is {}", game.getBoard());
 
             gameRepresentationRepository.save(gameRepresentation);
             game.setGameRepresentation(gameRepresentation);
 
         }
-        log.info("Game players: p1 " + game.getWhitePlayer() + " p2: " + game.getBlackPlayer());
+        log.info("Game players: p1 {} p2: {}", game.getWhitePlayer(), game.getBlackPlayer());
         return game;
 
     }
 
 
     public Game makeMove(String gameId,MoveMessage moveMessage)
-            throws InvalidMoveException, GameFinishedException, SquareNotFoundException, GameNotFoundException {
+            throws InvalidMoveException, GameFinishedException {
 
         Game game = getGameById(gameId);
         Board board = game.getBoard();
@@ -163,7 +149,6 @@ public class GameService {
         }
 
         int startSquareIndex = move.getStartSquare();
-        int targetSquareIndex = move.getTargetSquare();
         int movingPiece = board.getSquare()[startSquareIndex];
 
         if (movingPiece == Piece.NONE){
@@ -196,7 +181,7 @@ public class GameService {
             onGameEnding(game.getWhitePlayer(), game.getBlackPlayer(), state, game);
         }
         game.addFenToList(FenUtility.currentFen(board, true));
-        log.info("makeMove, game: " + game );
+        log.info("makeMove, game: {}", game);
         return game;
     }
 
@@ -260,7 +245,7 @@ public class GameService {
     public Game getGameById(String gameId) {
         Game game = GameStorage.getInstance().getGames().get(gameId);
         if (game == null) {
-            log.error("No game exists with id: " + gameId);
+            log.error("No game exists with id: {}", gameId);
         }
         return game;
     }

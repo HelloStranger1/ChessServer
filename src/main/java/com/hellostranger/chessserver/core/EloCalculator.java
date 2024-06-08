@@ -1,4 +1,4 @@
-package com.hellostranger.chessserver.models.game;
+package com.hellostranger.chessserver.core;
 
 public class EloCalculator {
     public final static int kFactor = 32;

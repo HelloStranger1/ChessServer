@@ -25,10 +25,8 @@ public class UserService {
     @Autowired
     private UserRepository userRepository;
 
-
     @Autowired
     GameRepresentationRepository gameRepresentationRepository;
-
 
     public User getUserByEmail(String userEmail) throws NoSuchElementException {
         User user =  userRepository.findByEmail(userEmail).orElseThrow();
@@ -41,23 +39,6 @@ public class UserService {
         }
         return user;
     }
-//
-//    @Scheduled(fixedRate = 90000)
-//    public void checkInactiveUsers(){
-//
-//        LocalDateTime currentTime = LocalDateTime.now();
-//        log.info(currentTime.toString());
-//        for(Map.Entry<User, UserActivity> entry : userActivityMap.entrySet()){
-//            User user = userRepository.findByEmail(entry.getKey().getEmail()).orElseThrow();
-//            UserActivity userActivity = entry.getValue();
-//
-//            if(userActivity.getLastActiveTime().plusMinutes(1).isBefore(currentTime)){
-//                user.setIsActive(false);
-//                userRepository.save(user);
-//                userActivityMap.remove(user);
-//            }
-//        }
-//    }
     public boolean isActive(@NonNull User user){
         return user.getLastTimeActive().plusMinutes(1).isAfter(LocalDateTime.now());
     }
@@ -114,14 +95,6 @@ public class UserService {
 
         return new GameHistoryResponse(representation,
                         whitePlayer, blackPlayer, opponentColorIndex, gameMoves.toString());
-    }
-
-
-    public void addFriend(User user, User friend) {
-        user.getFriends().add(friend);
-        friend.getFriends().add(user);
-        userRepository.save(user);
-        userRepository.save(friend);
     }
 
     public void removeFriend(User user, User friend) {

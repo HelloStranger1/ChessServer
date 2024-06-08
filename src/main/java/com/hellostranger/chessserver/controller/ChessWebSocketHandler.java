@@ -3,6 +3,7 @@ package com.hellostranger.chessserver.controller;
 
 import com.google.gson.Gson;
 import com.hellostranger.chessserver.controller.dto.websocket.*;
+import com.hellostranger.chessserver.core.Arbiter;
 import com.hellostranger.chessserver.core.GameResult;
 import com.hellostranger.chessserver.exceptions.*;
 import com.hellostranger.chessserver.models.game.Game;
@@ -26,9 +27,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @AllArgsConstructor
-
 public class ChessWebSocketHandler extends TextWebSocketHandler {
-    private final Map<String, Set<WebSocketSession>> gameSessions = new ConcurrentHashMap<>();
+    private final Map<String, Set<WebSocketSession>> gameSessions = new ConcurrentHashMap<>(); // Game sessions
     private final Map<WebSocketSession, String> sessionEmailMap = new ConcurrentHashMap<>();
     private final GameService gameService;
 
@@ -49,7 +49,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
         gameSessions.computeIfAbsent(gameId, k -> ConcurrentHashMap.newKeySet()).add(session);
         Game currentGame = gameService.getGameById(gameId);
         if (currentGame == null) {
-            log.error("After connection established. Couldn't find game with id: " + gameId);
+            log.error("After connection established. Couldn't find game with id: {}", gameId);
             return;
         }
 
@@ -84,7 +84,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
 
         Game currentGame = gameService.getGameById(gameId);
         if (currentGame == null) {
-            log.error("handleTextMessage. Couldn't find a game with id: " + gameId);
+            log.error("handleTextMessage. Couldn't find a game with id: {}", gameId);
             return;
         }
 
@@ -110,7 +110,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             try {
                 handleConcedeMessage(currentGame, concedeGameMessage);
             } catch (IOException e) {
-                log.error("HandleMessage. Had a problem sending message to everyone.");
+                log.error("HandleMessage. Had a problem sending concede message to everyone.");
             }
 
             return;
@@ -125,7 +125,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             try {
                 passTextMessageToAllPlayers(session, gameId,  message);
             } catch (IOException e) {
-                log.error("handle message. had a problem sending message to everyone.");
+                log.error("handle message. had a problem sending draw message to everyone.");
 
             }
             Game game = gameService.getGameById(gameId);
@@ -135,12 +135,23 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
             } else {
                 game.setIsDrawOfferedByBlack(true);
             }
+            if (game.getIsDrawOfferedByBlack() && game.getIsDrawOfferedByWhite()) {
+                gameService.onGameEnding(game.getWhitePlayer(), game.getBlackPlayer(), GameResult.DrawByAgreement, game);
+                GameEndMessage endMessage = getGameEndMessage(game);
+                if(endMessage != null) {
+                    try {
+                        sendMessageToAllPlayers(gameId, endMessage);
+                    } catch (IOException e) {
+                        log.error("HandleMessage. Had a problem sending message to everyone.", e);
+                    }
+                }
+            }
 
             return;
         }
 
         if (webSocketMessage.getMessageType() != MessageType.MOVE) {
-            log.error("This should have been a move. The real type is: " + webSocketMessage.getMessageType());
+            log.error("This should have been a move. The real type is: {}", webSocketMessage.getMessageType());
             return;
         }
 
@@ -180,29 +191,14 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
      * @return a GameEndMessage to be sent to all players. Can be null, if there was an error.
      */
     private static GameEndMessage getGameEndMessage(Game updatedGame) {
-        GameEndMessage endMessage = null;
         int whiteElo = updatedGame.getWhitePlayer().getElo();
         int blackElo = updatedGame.getBlackPlayer().getElo();
-        if(updatedGame.getGameState() == GameResult.BlackIsMated) {
-            endMessage = new GameEndMessage(updatedGame.getGameState(), "White won by checkmate", whiteElo, blackElo, updatedGame.getGameRepresentation().getId());
-        } else if (updatedGame.getGameState() == GameResult.BlackResigned) {
-            endMessage = new GameEndMessage(updatedGame.getGameState(), "White won by resignation", whiteElo, blackElo, updatedGame.getGameRepresentation().getId());
-        } else if (updatedGame.getGameState() == GameResult.WhiteIsMated) {
-            endMessage = new GameEndMessage(updatedGame.getGameState(), "Black won by checkmate", whiteElo, blackElo, updatedGame.getGameRepresentation().getId());
-        }else if (updatedGame.getGameState() == GameResult.WhiteResigned) {
-            endMessage = new GameEndMessage(updatedGame.getGameState(), "Black won by resignation", whiteElo, blackElo, updatedGame.getGameRepresentation().getId());
-        } else if (updatedGame.getGameState() == GameResult.DrawByAgreement) {
-            endMessage = new GameEndMessage(updatedGame.getGameState(), "Game ended in a draw by agreement", whiteElo, blackElo,updatedGame.getGameRepresentation().getId());
-        } else if(updatedGame.getGameState() == GameResult.FiftyMoveRule){
-            endMessage = new GameEndMessage(updatedGame.getGameState(), "Game ended in a draw by fifty move rule", whiteElo, blackElo,updatedGame.getGameRepresentation().getId());
-        } else if(updatedGame.getGameState() == GameResult.InsufficientMaterial) {
-            endMessage = new GameEndMessage(updatedGame.getGameState(), "Game ended in a draw due to insufficient material", whiteElo, blackElo, updatedGame.getGameRepresentation().getId());
-        } else if(updatedGame.getGameState() == GameResult.Repetition) {
-            endMessage = new GameEndMessage(updatedGame.getGameState(), "Game ended in a draw by repetition", whiteElo, blackElo,updatedGame.getGameRepresentation().getId());
-        } else if(updatedGame.getGameState() == GameResult.Stalemate) {
-            endMessage = new GameEndMessage(updatedGame.getGameState(), "Game ended in a draw by stalemate", whiteElo, blackElo,updatedGame.getGameRepresentation().getId());
+        GameResult gameResult = updatedGame.getGameState();
+        String gameDescription = Arbiter.getResultDescription(gameResult);
+        if (gameDescription.isBlank()) {
+            return null;
         }
-        return endMessage;
+        return new GameEndMessage(gameResult, gameDescription, whiteElo, blackElo, updatedGame.getGameRepresentation().getId());
     }
 
     /**
@@ -217,14 +213,10 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
         Game game = null;
         try{
             game = gameService.makeMove(gameId, moveMessage);
-        }catch (GameNotFoundException e){
-            log.error("Game Not found, error: " + e.getMsg());
         } catch (GameFinishedException e){
-            log.error("Game finished, error: " + e.getMsg());
-        } catch (SquareNotFoundException e){
-            log.error("Square Not Found, error: " + e.getMsg());
+            log.error("Game finished, error: {}", e.getMsg());
         } catch (InvalidMoveException e) {
-            log.error("Invalid Move, error: " + e.getMsg());
+            log.error("Invalid Move, error: {}", e.getMsg());
             sendInvalidMoveMessage(session);
         }
         return game;
@@ -253,7 +245,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
                 log.info("Someone resigned, but game is already over");
                 return;
             }
-            log.info("Someone resigned. his email is: " + message.getPlayerEmail() + " and the white email: " +currentGame.getWhitePlayer().getEmail());
+            log.info("Someone resigned. his email is: {} and the white email: {}", message.getPlayerEmail(), currentGame.getWhitePlayer().getEmail());
             boolean didWhiteResign = Objects.equals(
                     message.getPlayerEmail(),
                     currentGame.getWhitePlayer().getEmail()
@@ -277,14 +269,12 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
         try{
             session.sendMessage(new TextMessage(gson.toJson(msg, InvalidMoveMessage.class)));
         } catch (IOException e){
-            log.error("Could send the invalidMoveMessage, IO error. error is: " + e.getMessage());
+            log.error("Could send the invalidMoveMessage, IO error. error is: {}", e.getMessage());
         }
-        log.info("send: " + new TextMessage(gson.toJson(msg, InvalidMoveMessage.class)) + "to " + session);
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, @NonNull CloseStatus status) {
-        //TODO: Upgrade the connection closed to consider it as a concede. we wont allow reconnects
         log.error("Connection closed");
 
         String gameId = extractGameId(Objects.requireNonNull(session.getUri()).getPath());
